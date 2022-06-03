@@ -1,0 +1,9 @@
+# Compiled binaries
+release
+
+# Dependency dirs
+node_modules/
+
+# Jetbrains IDEA
+*.iml
+.idea/

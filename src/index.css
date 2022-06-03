@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+    height: 100vh;
+    overflow: hidden;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#root {
+    height: 100vh;
+    overflow: hidden;
+}
+
+#mainContainer {
+    height: calc(100vh - 64px);
+    top: 64px;
+    position: relative;
+    overflow: auto;
+    box-sizing: border-box;
+}
+
+.appDragRegion {
+    -webkit-user-select: none;
+    -webkit-app-region: drag;
+}
+
+.appNoDragRegion {
+    -webkit-user-select: text;
+    -webkit-app-region: no-drag;
+}
