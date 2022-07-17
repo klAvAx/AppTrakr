@@ -11,7 +11,8 @@ import Notification from "./Components/Notification";
 import Backdrop from "./Components/Backdrop";
 
 // TODO some language lines require inflections
-// TODO time calculation is wrong if app 2 apps are running at the same time from the same tracking group
+// TODO update whole app into separate Electron & UI repos
+// TODO restructure the whole app
 function App() {
   const isDev = useSelector(({ electron }) => electron.settings.appIsDev);
   const dispatch = useDispatch();

@@ -81,5 +81,6 @@
  "settings_heading_statistics_group": "Statistics",
  "settings_label_latest_title_count": "Latest Title Count",
  "settings_label_collapsed_group_by_default": "Groups are collapsed by default",
- "settings_label_show_elapsed_days": "Show elapsed time days"
+ "settings_label_show_elapsed_days": "Show elapsed time days",
+ "general_text_time_calc_may_be_inaccurate": "Time Calculation for this group may be inaccurate!"
 }

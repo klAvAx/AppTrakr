@@ -4,6 +4,20 @@ module.exports = {
   ],
   theme: {
     extend: {
+      animation: {
+        minuteSpin: 'minuteSpin 4s linear infinite',
+        hourSpin: 'hourSpin 240s linear infinite'
+      },
+      keyframes: {
+        minuteSpin: {
+          '0%': { transform: 'rotate(90deg)' },
+          '100%': { transform: 'rotate(450deg)' }
+        },
+        hourSpin: {
+          '0%': { transform: 'rotate(225deg)' },
+          '100%': { transform: 'rotate(585deg)' }
+        }
+      },
       width: {
         '21': '5.25rem',
         '27': '6.75rem'

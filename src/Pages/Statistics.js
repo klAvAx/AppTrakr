@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import I18N, { getTranslation } from "../extra/I18N";
 
-import { FaAngleDown, FaClock, FaFileExport, FaTimes } from "react-icons/fa";
+import { FaAngleDown, FaFileExport, FaTimes, FaExclamationTriangle } from "react-icons/fa";
 import { TbArrowBarDown } from "react-icons/tb";
 import { MdOutlineExpand } from "react-icons/md";
 
 import { confirm } from "../Components/Confirm";
 import Marquee from "../Components/Marquee";
+import Tooltip from "../Components/Tooltip";
+import Clock from "../Components/Clock";
 
 import { setNotification, toggleCollapsed, setGroupOffset, deleteGroupData, resetNotification } from "../redux/reducers/UI";
 import { requestNewStatisticsList } from "../redux/reducers/processList";
@@ -318,11 +320,70 @@ function StatisticsPage() {
           groupName: group_name,
           groupOffset: group_offset,
           groupRuntime: 0,
+          groupRuntimeCache: [],
+          groupActive: false,
+          unforeseenConsequences: null,
           items: []
         };
       }
       
-      sorted[group_id]['groupRuntime'] += (rest.startedAt && rest.stoppedAt ? rest.stoppedAt - rest.startedAt : 0);
+      if(rest.startedAt && rest.stoppedAt) {
+        // Potential Time Calculation BugFix
+        if(sorted[group_id]['groupRuntime'] === 0) {
+          sorted[group_id]['groupRuntime'] += (rest.stoppedAt - rest.startedAt);
+        } else {
+          let overlappingAppIndex = sorted[group_id]['groupRuntimeCache'].reverse().findIndex((elem) => {
+            return rest.startedAt >= elem.startedAt && rest.startedAt <= elem.stoppedAt;
+          });
+          
+          if(overlappingAppIndex === -1) {
+            // App Overlap not found Add full runtime
+            sorted[group_id]['groupRuntime'] += (rest.stoppedAt - rest.startedAt);
+          } else {
+            // App Overlap found Add/Subtract remainder
+            let overlapStart = sorted[group_id]['groupRuntimeCache'][overlappingAppIndex].startedAt;
+            let overlapEnd = sorted[group_id]['groupRuntimeCache'][overlappingAppIndex].stoppedAt;
+  
+            if(rest.startedAt > overlapStart) {
+              /*if(rest.stoppedAt > overlapEnd) {*/
+                // add remaining time, 2nd app closed later than the first
+                sorted[group_id]['groupRuntime'] += (rest.stoppedAt - overlapEnd);
+              /*} else {
+                // there's nothing to add, 2nd app closed before the first one (maybe a subtraction?)
+                console.log("AAAAAOOOOOOGGAAAAAAHHHH!");
+              }*/
+            } else if (rest.startedAt < overlapStart) {
+              // reverse overlap ?? (FYI this should not happen)
+              if(rest.stoppedAt > overlapEnd) {
+                //
+                if(sorted[group_id]['unforeseenConsequences'] === null) {
+                  sorted[group_id]['unforeseenConsequences'] = "typeA";
+                }
+                console.log("reverse overlap 2nd app closed later than the 1st one");
+              } else {
+                //
+                if(sorted[group_id]['unforeseenConsequences'] === null || sorted[group_id]['unforeseenConsequences'] === "typeA") {
+                  sorted[group_id]['unforeseenConsequences'] = "typeB";
+                }
+                console.log("reverse overlap 2nd app closed before the 1st one");
+              }
+            } else {
+              // equal start time
+              /*if(rest.stoppedAt > overlapEnd) {*/
+                // add remaining time, 2nd app closed later than the first
+                sorted[group_id]['groupRuntime'] += (rest.stoppedAt - overlapEnd);
+              /*} else {
+                // there's nothing to add, 2nd app closed before the first one (maybe a subtraction?)
+                console.log("AAAAAOOOOOOGGAAAAAAHHHH!");
+              }*/
+            }
+          }
+        }
+        sorted[group_id]['groupRuntimeCache'].push({ startedAt: rest.startedAt, stoppedAt: rest.stoppedAt });
+      } else {
+        sorted[group_id]['groupActive'] = true;
+      }
+      
       sorted[group_id]['items'].push({ ...rest });
     }
     
@@ -339,19 +400,38 @@ function StatisticsPage() {
               className={`relative pb-0 columns-1 border-2 rounded-lg border-slate-400 bg-slate-200 ${groupIndex > 0 ? 'mt-4' : ''}`}
             >
               <div className={`absolute top-0 inset-x-0 p-2 flex border-b-2 border-slate-400 bg-slate-350 font-bold z-1000 ${_collapsed ? '' : 'stickyJs'}`}>
-                <div
-                  title={getTranslation('statistics_text_total_runtime_x', 'Total Runtime: %s').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}
-                  className="w-6 h-6 mr-2"
+                <Tooltip
+                  id={`group_${groupIndex}`}
+                  showArrow={false}
+                  placement="bottomLeft"
+                  content={(
+                    <div>
+                      <h2 className="font-bold">{getTranslation('statistics_text_total_runtime_x', 'Total Runtime: %s').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}</h2>
+                    </div>
+                  )}
                 >
-                  <span className='sr-only'>{getTranslation('statistics_text_total_runtime_x').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}</span>
-                  <FaClock className='w-full h-full' aria-hidden='true' />
-                </div>
+                  <div className="w-6 h-6 mr-2" tooltiptarget="">
+                    <span className='sr-only'>{getTranslation('statistics_text_total_runtime_x').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}</span>
+                    <Clock animate={sorted[group].groupActive} circleColor="text-black" hourHandColor="text-slate-400" minuteHandColor="text-slate-300" />
+                  </div>
+                </Tooltip>
                 <div className="w-full truncate mr-2">{sorted[group].groupName}</div>
+                {
+                  sorted[group].unforeseenConsequences === "typeA" || sorted[group].unforeseenConsequences === "typeB" ?
+                    <div
+                      title={getTranslation("general_text_time_calc_may_be_inaccurate", "Time Calculation for this group may be inaccurate!")}
+                      className={`w-6 h-6 transition-colors animate-pulse ${sorted[group].unforeseenConsequences === "typeA" ? "text-yellow-600" : "text-red-600"}`}
+                    >
+                      <span className="sr-only">{getTranslation("general_text_time_calc_may_be_inaccurate")}</span>
+                      <FaExclamationTriangle className={`w-full h-full`} aria-hidden="true" />
+                    </div> :
+                    null
+                }
                 {
                   sorted[group].groupOffset ?
                     <button
                       title={getTranslation("general_text_reset_view_offset", "Reset View Offset")}
-                      className='w-6 h-6 transition-colors hover:text-slate-50'
+                      className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
                       onClick={() => {dispatch(setGroupOffset({groupID: group, groupOffset: 0}))}}
                     >
                       <span className='sr-only'>{getTranslation('general_text_reset_view_offset')}</span>
