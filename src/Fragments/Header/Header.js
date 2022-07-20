@@ -13,6 +13,7 @@ import { BsPinAngle, BsPinAngleFill } from 'react-icons/bs';
 
 import routes from "../../extra/routes";
 import I18N, { getTranslation } from "../../extra/I18N";
+import Tooltip from "../../Components/Tooltip";
 
 export default function Header() {
   const [show, setShow] = useState(false);
@@ -74,25 +75,39 @@ export default function Header() {
                   </div>
                 </div>
                 <div className="absolute inset-y-0 right-12 flex items-center appNoDragRegion">
-                  <button
-                    title={isPinned ? getTranslation('header_button_title_unpin_app', 'Unpin App') : getTranslation('header_button_title_pin_app', 'Pin App')}
-                    onClick={() => dispatch(toggleAppSetting("appIsPinned"))}
-                    className={`inline-flex items-center justify-center p-2 rounded-md transition transform ${isPinned ? '-rotate-45 text-white hover:text-gray-400' : 'text-gray-400 hover:text-white'} `}
+                  <Tooltip
+                    id={`tooltip_header_pin`}
+                    placement="rightBottom"
+                    content={(
+                      <h2 className="font-bold">{isPinned ? <I18N index="header_button_title_unpin_app" text="Unpin App" /> : <I18N index="header_button_title_pin_app" text="Pin App" />}</h2>
+                    )}
                   >
-                    <span className="sr-only">{isPinned ? getTranslation('header_button_title_unpin_app') : getTranslation('header_button_title_pin_app')}</span>
-                    {isPinned ? <BsPinAngleFill className="block h-6 w-6" aria-hidden="true" /> : <BsPinAngle className="block h-6 w-6" aria-hidden="true" />}
-                  </button>
+                    <button
+                      onClick={() => dispatch(toggleAppSetting("appIsPinned"))}
+                      className={`inline-flex items-center justify-center p-2 rounded-md transition transform ${isPinned ? '-rotate-45 text-white hover:text-gray-400' : 'text-gray-400 hover:text-white'} `}
+                    >
+                      <span className="sr-only">{isPinned ? getTranslation('header_button_title_unpin_app') : getTranslation('header_button_title_pin_app')}</span>
+                      {isPinned ? <BsPinAngleFill className="block h-6 w-6" aria-hidden="true" /> : <BsPinAngle className="block h-6 w-6" aria-hidden="true" />}
+                    </button>
+                  </Tooltip>
                 </div>
                 <div className="absolute inset-y-0 right-0 flex items-center appNoDragRegion">
-                  <button
-                    title={isRecording ? getTranslation('header_button_title_stop_recording', 'Stop Recording') : getTranslation('header_button_title_start_recording', 'Start Recording')}
-                    disabled={isRecordButtonDisabled}
-                    onClick={() => dispatch(toggleAppSetting("appRecordingProcesses"))}
-                    className={`inline-flex items-center justify-center p-2 rounded-md transition-colors ${isRecording ? 'animate-pulse text-red-600 hover:text-red-400' : `text-gray-400 ${!isRecordButtonDisabled ? 'hover:text-white' : ''}`}`}
+                  <Tooltip
+                    id={`tooltip_header_rec`}
+                    placement="rightBottom"
+                    content={(
+                      <h2 className="font-bold">{isRecording ? <I18N index="header_button_title_stop_recording" text="Stop Recording" /> : <I18N index="header_button_title_start_recording" text="Start Recording" /> }</h2>
+                    )}
                   >
-                    <span className="sr-only">{isRecording ? getTranslation('header_button_title_stop_recording') : getTranslation('header_button_title_start_recording') }</span>
-                    <FaCircle className="block h-6 w-6" aria-hidden="true" />
-                  </button>
+                    <button
+                      disabled={isRecordButtonDisabled}
+                      onClick={() => dispatch(toggleAppSetting("appRecordingProcesses"))}
+                      className={`inline-flex items-center justify-center p-2 rounded-md transition-colors ${isRecording ? 'animate-pulse text-red-600 hover:text-red-400' : `text-gray-400 ${!isRecordButtonDisabled ? 'hover:text-white' : ''}`}`}
+                    >
+                      <span className="sr-only">{isRecording ? getTranslation('header_button_title_stop_recording') : getTranslation('header_button_title_start_recording') }</span>
+                      <FaCircle className="block h-6 w-6" aria-hidden="true" />
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
             </div>

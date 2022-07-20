@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Switch, Transition } from "@headlessui/react";
 
 import I18N, { getLangList, getTranslation } from "../extra/I18N";
@@ -10,6 +10,7 @@ import { toggleAppSetting, setAppSetting } from "../redux/reducers/electron";
 import { FaPlus } from "react-icons/fa";
 import SelectList from "../Components/SelectList";
 import SimpleDataList from "../Components/SimpleDataList";
+import Tooltip from "../Components/Tooltip";
 import Button from "../Components/Button";
 import { requestNewStatisticsList } from "../redux/reducers/processList";
 
@@ -28,11 +29,11 @@ function SettingsPage() {
   const appSettings = useSelector(({ electron }) => electron.settings);
   const groups = useSelector(({ simpleDataList }) => simpleDataList?.groups);
   
-  const newGroupButton = useRef();
-  const newRuleButton = useRef();
-  
   const group1 = useRef();
   const group2 = useRef();
+  
+  const [newGroupButtonState, setNewGroupButtonState] = useState(false);
+  const [newRuleButtonState, setNewRuleButtonState] = useState(false);
   
   const [rulesShouldUpdate, setRulesShouldUpdate] = useState(false);
   
@@ -157,10 +158,19 @@ function SettingsPage() {
             <I18N index="settings_heading_process_tracking_groups_group" text="Process Tracking Groups"/>
           </h2>
           <div className="absolute flex self-center justify-middle right-0">
-            <Button ref={newGroupButton} title={getTranslation('general_text_new_x', 'New %s').replace("%s", getTranslation('general_text_group', 'Group').toLowerCase())} className="w-[32px] h-[32px]">
-              <span className="sr-only">{getTranslation('general_text_new_x').replace("%s", getTranslation('general_text_group').toLowerCase())}</span>
-              <FaPlus className="block w-[24px] h-[24px]" aria-hidden="true" />
-            </Button>
+            <Tooltip
+              id={`tooltip_group1`}
+              placement="rightTop"
+              content={(
+                <h2 className="font-bold">{getTranslation('general_text_new_x', 'New %s').replace("%s", getTranslation('general_text_group', 'Group').toLowerCase())}</h2>
+              )}
+            >
+              {/* NOTE im pretty sure this can be done differently with refs, but have no ideas on how to implement that... */}
+              <Button onClick={() => setNewGroupButtonState(true)} className="w-[32px] h-[32px]">
+                <span className="sr-only">{getTranslation('general_text_new_x').replace("%s", getTranslation('general_text_group').toLowerCase())}</span>
+                <FaPlus className="block w-[24px] h-[24px]" aria-hidden="true" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
         <div className="mt-3 columns-1">
@@ -177,7 +187,8 @@ function SettingsPage() {
             visibleData={[
               { key: "name", type: "text" }
             ]}
-            newButton={newGroupButton}
+            newButtonState={newGroupButtonState}
+            onOpenNewModal={() => setNewGroupButtonState(false)}
             onDelete={() => {
               setRulesShouldUpdate(true);
               dispatch(requestNewStatisticsList());
@@ -218,10 +229,19 @@ function SettingsPage() {
             <I18N index="settings_heading_process_tracking_rules_group" text="Process Tracking Rules"/>
           </h2>
           <div className="absolute flex self-center justify-middle right-0">
-            <Button ref={newRuleButton} title={getTranslation('general_text_new_x').replace("%s", getTranslation('general_text_rule', 'Rule').toLowerCase())} className="w-[32px] h-[32px]">
-              <span className="sr-only">{getTranslation('general_text_new_x').replace("%s", getTranslation('general_text_rule').toLowerCase())}</span>
-              <FaPlus className="block w-[24px] h-[24px]" aria-hidden="true" />
-            </Button>
+            <Tooltip
+              id={`tooltip_group2`}
+              placement="rightTop"
+              content={(
+                <h2 className="font-bold">{getTranslation('general_text_new_x').replace("%s", getTranslation('general_text_rule', 'Rule').toLowerCase())}</h2>
+              )}
+            >
+              {/* NOTE im pretty sure this can be done differently with refs, but have no ideas on how to implement that... */}
+              <Button onClick={() => setNewRuleButtonState(true)} className="w-[32px] h-[32px]">
+                <span className="sr-only">{getTranslation('general_text_new_x').replace("%s", getTranslation('general_text_rule').toLowerCase())}</span>
+                <FaPlus className="block w-[24px] h-[24px]" aria-hidden="true" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
         <div className="mt-3 columns-1">
@@ -262,7 +282,8 @@ function SettingsPage() {
               { key: "rule", type: "text" },
               { key: "group_id", type: "subtitle", getter: groups }
             ]}
-            newButton={newRuleButton}
+            newButtonState={newRuleButtonState}
+            onOpenNewModal={() => setNewRuleButtonState(false)}
             shouldUpdate={rulesShouldUpdate}
             onUpdate={() => setRulesShouldUpdate(false)}
             onDelete={() => dispatch(requestNewStatisticsList())}

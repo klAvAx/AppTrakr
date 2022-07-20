@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { getIcon } from "../extra/typeIcons";
 import { FaAngleDown } from "react-icons/fa";
@@ -6,6 +6,7 @@ import I18N, { getTranslation } from "../extra/I18N";
 import Marquee from "../Components/Marquee";
 import { getDataOfType } from "../redux/reducers/simpleDataList";
 import { toggleCollapsed } from "../redux/reducers/UI";
+import Tooltip from "../Components/Tooltip";
 
 function IndexPage() {
   const dataConfiguredGroups = useSelector(({ simpleDataList }) => simpleDataList?.groups);
@@ -38,14 +39,23 @@ function IndexPage() {
                   >
                     <div className={`-mx-2 -mt-2 p-2 flex ${_collapsed ? "" : "mb-2"} border-b-2 border-slate-400 bg-slate-350 font-bold z-1000`}>
                       <div className="w-full truncate">{group.name}</div>
-                      <button
-                        title={_collapsed ? getTranslation('general_text_expand', 'Expand') : getTranslation('general_text_collapse', 'Collapse')}
-                        className="w-6 h-6 transition-colors hover:text-slate-50"
-                        onClick={() => dispatch(toggleCollapsed({group: "index", key: groupIndex}))}
+                      <Tooltip
+                        id={`tooltip_${groupIndex}`}
+                        placement="rightBottom"
+                        content={(
+                          <h2 className="font-bold">
+                            {_collapsed ? <I18N index="general_text_expand" text="Expand" /> : <I18N index="general_text_collapse" text="Collapse" />}
+                          </h2>
+                        )}
                       >
-                        <span className='sr-only'>{ _collapsed ? getTranslation('general_text_expand') : getTranslation('general_text_collapse') }</span>
-                        <FaAngleDown className={`w-full h-full transition ${_collapsed ? "rotate-0" : "rotate-180"}`} />
-                      </button>
+                        <button
+                          className="w-6 h-6 transition-colors hover:text-slate-50"
+                          onClick={() => dispatch(toggleCollapsed({group: "index", key: groupIndex}))}
+                        >
+                          <span className='sr-only'>{ _collapsed ? getTranslation('general_text_expand') : getTranslation('general_text_collapse') }</span>
+                          <FaAngleDown className={`w-full h-full transition ${_collapsed ? "rotate-0" : "rotate-180"}`} />
+                        </button>
+                      </Tooltip>
                     </div>
                     <div className={`top-0 ${_collapsed ? "h-0" : "h-auto"} overflow-hidden z-999`}>
                       {rules.map((rule, ruleIndex) => {
@@ -54,13 +64,20 @@ function IndexPage() {
                             key={`${group.name}_${rule.rule}_${ruleIndex}`}
                             className={`flex py-1 ${ruleIndex < (rules.length - 1) ? 'border-b-2 border-slate-300' : ''}`}
                           >
-                            <div
-                              title={getTranslation(`general_text_${rule.type}_rule_type`)}
-                              className="text-left text-xs h-6 w-6 mr-2 content-center"
+                            <Tooltip
+                              id={`tooltip_${groupIndex}_${ruleIndex}`}
+                              placement="leftBottom"
+                              content={(
+                                <h2 className="font-bold">
+                                  <I18N index={`general_text_${rule.type}_rule_type`} text="" />
+                                </h2>
+                              )}
                             >
-                              <span className='sr-only'>{getTranslation(`general_text_${rule.type}_rule_type`)}</span>
-                              {getIcon(rule.type)}
-                            </div>
+                              <div className="text-left text-xs h-6 w-6 mr-2 content-center">
+                                <span className='sr-only'>{getTranslation(`general_text_${rule.type}_rule_type`)}</span>
+                                {getIcon(rule.type)}
+                              </div>
+                            </Tooltip>
                             <div className="w-full truncate text-left">
                               <Marquee text={rule.type === "exec" ? rule.rule : `/${rule.rule}/`} />
                             </div>

@@ -1,7 +1,9 @@
 import React from 'react';
 import { useSelector } from "react-redux";
 import I18N, { getTranslation } from "../extra/I18N";
+
 import Marquee from "../Components/Marquee";
+import Tooltip from "../Components/Tooltip";
 
 const formatDate = (date) => {
   let formatted = "";
@@ -29,21 +31,46 @@ function ProcessListPage() {
         return (
           <div
             key={`processList_${procIndex}`}
-            title={process.WindowTitle}
             className={`p-2 columns-1 border-2 rounded-lg border-slate-400 bg-slate-200 ${procIndex > 0 ? 'mt-4' : ''}`}
           >
-            <div className="w-full truncate">
-              <Marquee text={process.WindowTitle} />
-            </div>
+            <Tooltip
+              id={`tooltip_${procIndex}_title`}
+              placement="leftBottom"
+              content={(
+                <h2 className="font-bold">{process.WindowTitle}</h2>
+              )}
+            >
+              <div className="w-full truncate">
+                <Marquee text={process.WindowTitle} />
+              </div>
+            </Tooltip>
             <div className="flex text-xs">
               <div className="w-full truncate mr-2">
-                <span title={getTranslation('processlist_text_process_executable', 'Process Executable')}>
-                  {process.Executable}
-                </span>
+                <Tooltip
+                  id={`tooltip_${procIndex}_exec`}
+                  placement="leftBottom"
+                  content={(
+                    <h2 className="font-bold">
+                      <I18N index="processlist_text_process_executable" text="Process Executable" />
+                    </h2>
+                  )}
+                >
+                  <span>{process.Executable}</span>
+                </Tooltip>
               </div>
-              <div title={getTranslation('processlist_text_time_process_started', 'Time Process Started')} className="text-right whitespace-nowrap">
-                {formatDate(new Date(process.StartTime*1000))}
-              </div>
+              <Tooltip
+                id={`tooltip_${procIndex}_time`}
+                placement="rightBottom"
+                content={(
+                  <h2 className="font-bold">
+                    <I18N index="processlist_text_time_process_started" text="Time Process Started" />
+                  </h2>
+                )}
+              >
+                <div className="text-right whitespace-nowrap">
+                  {formatDate(new Date(process.StartTime*1000))}
+                </div>
+              </Tooltip>
             </div>
           </div>
         );

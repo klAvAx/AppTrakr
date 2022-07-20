@@ -274,18 +274,24 @@ function StatisticsPage() {
     
     return (
       <React.Fragment>
-        <h3
-          title={expandable ? (_expanded ? getTranslation('general_text_expand', 'Expand') : getTranslation('general_text_collapse', 'Collapse')) : null}
-          className={`w-full text-center font-bold relative whitespace-nowrap transition-colors hover:bg-slate-300 ${expandable ? "cursor-pointer" : ""}`}
-          onClick={expandable ? () => dispatch(toggleCollapsed({group: 'statistics', key: titleID})) : null}
+        <Tooltip
+          id={`tooltip_${titleID}_title`}
+          placement="rightBottom"
+          content={expandable ? (<h2 className="font-bold">{_expanded ? <I18N index="general_text_expand" text="Expand" /> : <I18N index="general_text_collapse" text="Collapse" /> }</h2>) : null}
         >
-          <I18N index='statistics_heading_window_title_changes_and_durations' text='Window Title Changes & Durations' />
-          {expandable ? (
-            <div className="absolute right-0 top-0 w-6 h-6 transition-colors hover:text-slate-50">
-              <FaAngleDown className={`w-full h-full transition ${_expanded ? 'rotate-180' : 'rotate-0'}`} aria-hidden="true" />
-            </div>
-          ) : null}
-        </h3>
+          <h3
+            className={`w-full text-center font-bold relative whitespace-nowrap transition-colors hover:bg-slate-300 ${expandable ? "cursor-pointer" : ""}`}
+            onClick={expandable ? () => dispatch(toggleCollapsed({group: 'statistics', key: titleID})) : null}
+          >
+            <I18N index='statistics_heading_window_title_changes_and_durations' text='Window Title Changes & Durations' />
+            {expandable ? (
+              <div className="absolute right-0 top-0 w-6 h-6 transition-colors hover:text-slate-50">
+                <FaAngleDown className={`w-full h-full transition ${_expanded ? 'rotate-180' : 'rotate-0'}`} aria-hidden="true" />
+              </div>
+            ) : null}
+          </h3>
+        </Tooltip>
+        
         <div className="w-full mt-2">
           {expandable ? (
             <React.Fragment>
@@ -401,16 +407,16 @@ function StatisticsPage() {
             >
               <div className={`absolute top-0 inset-x-0 p-2 flex border-b-2 border-slate-400 bg-slate-350 font-bold z-1000 ${_collapsed ? '' : 'stickyJs'}`}>
                 <Tooltip
-                  id={`group_${groupIndex}`}
-                  showArrow={false}
-                  placement="bottomLeft"
+                  id={`tooltip_${groupIndex}`}
+                  showArrow={true}
+                  placement="leftBottom"
                   content={(
-                    <div>
-                      <h2 className="font-bold">{getTranslation('statistics_text_total_runtime_x', 'Total Runtime: %s').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}</h2>
-                    </div>
+                    <h2 className="font-bold">
+                      {getTranslation('statistics_text_total_runtime_x', 'Total Runtime: %s').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}
+                    </h2>
                   )}
                 >
-                  <div className="w-6 h-6 mr-2" tooltiptarget="">
+                  <div className="w-6 h-6 mr-2">
                     <span className='sr-only'>{getTranslation('statistics_text_total_runtime_x').replace('%s', formatTimestampToElapsedTime(sorted[group].groupRuntime, showElapsedDays))}</span>
                     <Clock animate={sorted[group].groupActive} circleColor="text-black" hourHandColor="text-slate-400" minuteHandColor="text-slate-300" />
                   </div>
@@ -418,75 +424,116 @@ function StatisticsPage() {
                 <div className="w-full truncate mr-2">{sorted[group].groupName}</div>
                 {
                   sorted[group].unforeseenConsequences === "typeA" || sorted[group].unforeseenConsequences === "typeB" ?
-                    <div
-                      title={getTranslation("general_text_time_calc_may_be_inaccurate", "Time Calculation for this group may be inaccurate!")}
-                      className={`w-6 h-6 transition-colors animate-pulse ${sorted[group].unforeseenConsequences === "typeA" ? "text-yellow-600" : "text-red-600"}`}
+                    <Tooltip
+                      id={`tooltip_${groupIndex}_warning`}
+                      placement="rightBottom"
+                      content={(
+                        <h2 className="font-bold">
+                          <I18N index="general_text_time_calc_may_be_inaccurate" text="Time Calculation for this group may be inaccurate!" />
+                        </h2>
+                      )}
                     >
-                      <span className="sr-only">{getTranslation("general_text_time_calc_may_be_inaccurate")}</span>
-                      <FaExclamationTriangle className={`w-full h-full`} aria-hidden="true" />
-                    </div> :
-                    null
+                      <div className={`w-6 h-6 transition-colors animate-pulse ${sorted[group].unforeseenConsequences === "typeA" ? "text-yellow-600" : "text-red-600"}`}>
+                        <span className="sr-only">{getTranslation("general_text_time_calc_may_be_inaccurate")}</span>
+                        <FaExclamationTriangle className={`w-full h-full`} aria-hidden="true" />
+                      </div>
+                    </Tooltip> : null
                 }
                 {
                   sorted[group].groupOffset ?
-                    <button
-                      title={getTranslation("general_text_reset_view_offset", "Reset View Offset")}
-                      className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
-                      onClick={() => {dispatch(setGroupOffset({groupID: group, groupOffset: 0}))}}
+                    <Tooltip
+                      id={`tooltip_${groupIndex}_resetOffset`}
+                      placement="rightBottom"
+                      content={(
+                        <h2 className="font-bold">
+                          <I18N index="general_text_reset_view_offset" text="Reset View Offset" />
+                        </h2>
+                      )}
                     >
-                      <span className='sr-only'>{getTranslation('general_text_reset_view_offset')}</span>
-                      <MdOutlineExpand className={`w-full h-full`} aria-hidden="true" />
-                    </button> :
-                    null
+                      <button
+                        className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
+                        onClick={() => {dispatch(setGroupOffset({groupID: group, groupOffset: 0}))}}
+                      >
+                        <span className='sr-only'>{getTranslation('general_text_reset_view_offset')}</span>
+                        <MdOutlineExpand className={`w-full h-full`} aria-hidden="true" />
+                      </button>
+                    </Tooltip> : null
                 }
-                <button
-                  title={getTranslation("general_text_delete_group_data", "Delete Collected Group Data")}
-                  className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
-                  onClick={() => {
-                    confirm({
-                      title: getTranslation('general_message_text_are_you_sure', 'Are You Sure?'),
-                      message: getTranslation('general_message_text_delete_group_data', 'This WILL delete all group Data!'),
-                      confirmButton: async () => {
-                        let response = await dispatch(deleteGroupData(group));
-                        
-                        if(typeof response.payload.response === "number" && response.payload.response > 0) {
-                          dispatch(requestNewStatisticsList());
-                          dispatch(setNotification({
-                            message: `general_message_text_data_deleted`,
-                            bottomOffset: 0
-                          }));
-                        } else {
-                          dispatch(setNotification({
-                            message: `general_message_text_data_delete_fail`,
-                            bottomOffset: 0
-                          }));
+                <Tooltip
+                  id={`tooltip_${groupIndex}_delete`}
+                  placement="rightBottom"
+                  content={(
+                    <h2 className="font-bold">
+                      <I18N index="general_text_delete_group_data" text="Delete Collected Group Data" />
+                    </h2>
+                  )}
+                >
+                  <button
+                    className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
+                    onClick={() => {
+                      confirm({
+                        title: getTranslation('general_message_text_are_you_sure', 'Are You Sure?'),
+                        message: getTranslation('general_message_text_delete_group_data', 'This WILL delete all group Data!'),
+                        confirmButton: async () => {
+                          let response = await dispatch(deleteGroupData(group));
+          
+                          if(typeof response.payload.response === "number" && response.payload.response > 0) {
+                            dispatch(requestNewStatisticsList());
+                            dispatch(setNotification({
+                              message: `general_message_text_data_deleted`,
+                              bottomOffset: 0
+                            }));
+                          } else {
+                            dispatch(setNotification({
+                              message: `general_message_text_data_delete_fail`,
+                              bottomOffset: 0
+                            }));
+                          }
+                        },
+                        onShow: () => {
+                          dispatch(resetNotification());
                         }
-                      },
-                      onShow: () => {
-                        dispatch(resetNotification());
-                      }
-                    });
-                  }}
+                      });
+                    }}
+                  >
+                    <span className='sr-only'>{getTranslation('general_text_delete_group_data')}</span>
+                    <FaTimes className={`w-full h-full`} aria-hidden="true" />
+                  </button>
+                </Tooltip>
+                <Tooltip
+                  id={`tooltip_${groupIndex}_export`}
+                  placement="rightBottom"
+                  content={(
+                    <h2 className="font-bold">
+                      <I18N index="general_text_export_csv" text="Export CSV" />
+                    </h2>
+                  )}
                 >
-                  <span className='sr-only'>{getTranslation('general_text_delete_group_data')}</span>
-                  <FaTimes className={`w-full h-full`} aria-hidden="true" />
-                </button>
-                <button
-                  title={getTranslation("general_text_export_csv", "Export CSV")}
-                  className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
-                  onClick={() => dispatch(setNotification({message: "TODO export group CSV", translatable: false}))}
+                  <button
+                    className='w-6 h-6 ml-2 transition-colors hover:text-slate-50'
+                    onClick={() => dispatch(setNotification({message: "TODO export group CSV", translatable: false}))}
+                  >
+                    <span className='sr-only'>{getTranslation('general_text_export_csv')}</span>
+                    <FaFileExport className={`w-full h-full`} aria-hidden="true" />
+                  </button>
+                </Tooltip>
+                <Tooltip
+                  id={`tooltip_${groupIndex}_expand`}
+                  placement="rightBottom"
+                  content={(
+                    <h2 className="font-bold">
+                      {_collapsed ? <I18N index="general_text_expand" text="Expand" /> : <I18N index="general_text_collapse" text="Collapse" />}
+                    </h2>
+                  )}
                 >
-                  <span className='sr-only'>{getTranslation('general_text_export_csv')}</span>
-                  <FaFileExport className={`w-full h-full`} aria-hidden="true" />
-                </button>
-                <button
-                  title={_collapsed ? getTranslation('general_text_expand', 'Expand') : getTranslation('general_text_collapse', 'Collapse')}
-                  className={`w-6 h-6 ml-2 transition-colors hover:text-slate-50 ${_collapsed ? '' : 'stickyJsHide'}`}
-                  onClick={() => dispatch(toggleCollapsed({group: 'statistics', key: groupID}))}
-                >
-                  <span className='sr-only'>{ _collapsed ? getTranslation('general_text_expand') : getTranslation('general_text_collapse') }</span>
-                  <FaAngleDown className={`w-full h-full transition ${_collapsed ? 'rotate-0' : 'rotate-180'}`} aria-hidden="true" />
-                </button>
+                  <button
+                    className={`w-6 h-6 ml-2 transition-colors hover:text-slate-50 ${_collapsed ? '' : 'stickyJsHide'}`}
+                    onClick={() => dispatch(toggleCollapsed({group: 'statistics', key: groupID}))}
+                  >
+                    <span className='sr-only'>{ _collapsed ? getTranslation('general_text_expand') : getTranslation('general_text_collapse') }</span>
+                    <FaAngleDown className={`w-full h-full transition ${_collapsed ? 'rotate-0' : 'rotate-180'}`} aria-hidden="true" />
+                  </button>
+                </Tooltip>
               </div>
               <div className={`${_collapsed ? 'h-0 mt-[42px]' : 'h-auto mt-12'} overflow-hidden z-999`}>
                 {sorted[group].items.map((process, processIndex) => {
@@ -500,25 +547,52 @@ function StatisticsPage() {
                     >
                       <div className="flex w-full flex-col">
                           <h2 className="w-full mb-2 px-12 text-center text-xl font-bold relative whitespace-nowrap transition-colors hover:bg-slate-300">
-                            <div
-                              title={_collapsedProcess ? getTranslation('general_text_expand', 'Expand') : getTranslation('general_text_collapse', 'Collapse')}
-                              className={`absolute top-0 bottom-0 left-0 right-12 cursor-pointer`}
-                              onClick={() => {dispatch(toggleCollapsed({group: 'statistics', key: processID}))}}
-                            />
-                            <I18N index='statistics_heading_process_details' text='Process Details' />
-                            <div className="absolute flex right-0 top-[2px] w-12 h-6 transition-colors">
-                              <TbArrowBarDown
-                                title={getTranslation('general_text_apply_tracking_offset', 'Apply Tracking Offset From this Point (INCLUSIVE)')}
-                                className={`w-6 h-full transition hover:text-slate-50 cursor-pointer`}
-                                aria-hidden="true"
-                                onClick={() => {dispatch(setGroupOffset({groupID: group, groupOffset: process.startedAt}))}}
-                              />
-                              <FaAngleDown
-                                title={_collapsedProcess ? getTranslation('general_text_expand', 'Expand') : getTranslation('general_text_collapse', 'Collapse')}
-                                className={`w-6 h-full transition hover:text-slate-50 cursor-pointer ${_collapsedProcess ? 'rotate-0' : 'rotate-180'}`}
-                                aria-hidden="true"
+                            <Tooltip
+                              id={`tooltip_${groupIndex}_${processIndex}_title`}
+                              placement="rightBottom"
+                              content={(
+                                <h2 className="font-bold">
+                                  {_collapsedProcess ? <I18N index="general_text_expand" text="Expand" /> : <I18N index="general_text_collapse" text="Collapse" />}
+                                </h2>
+                              )}
+                            >
+                              <div
+                                className={`absolute top-0 bottom-0 left-0 right-12 cursor-pointer`}
                                 onClick={() => {dispatch(toggleCollapsed({group: 'statistics', key: processID}))}}
                               />
+                            </Tooltip>
+                            <I18N index='statistics_heading_process_details' text='Process Details' />
+                            <div className="absolute flex right-0 top-[2px] w-12 h-6 transition-colors">
+                              <Tooltip
+                                id={`tooltip_${groupIndex}_${processIndex}_track`}
+                                placement="rightBottom"
+                                content={(
+                                  <h2 className="font-bold">
+                                    <I18N index="general_text_apply_tracking_offset" text="Apply Tracking Offset From this Point (INCLUSIVE)" />
+                                  </h2>
+                                )}
+                              >
+                                <TbArrowBarDown
+                                  className={`w-6 h-full transition hover:text-slate-50 cursor-pointer`}
+                                  aria-hidden="true"
+                                  onClick={() => {dispatch(setGroupOffset({groupID: group, groupOffset: process.startedAt}))}}
+                                />
+                              </Tooltip>
+                              <Tooltip
+                                id={`tooltip_${groupIndex}_${processIndex}_expand`}
+                                placement="rightBottom"
+                                content={(
+                                  <h2 className="font-bold">
+                                    {_collapsedProcess ? <I18N index="general_text_expand" text="Expand" /> : <I18N index="general_text_collapse" text="Collapse" />}
+                                  </h2>
+                                )}
+                              >
+                                <FaAngleDown
+                                  className={`w-6 h-full transition hover:text-slate-50 cursor-pointer ${_collapsedProcess ? 'rotate-0' : 'rotate-180'}`}
+                                  aria-hidden="true"
+                                  onClick={() => {dispatch(toggleCollapsed({group: 'statistics', key: processID}))}}
+                                />
+                              </Tooltip>
                             </div>
                           </h2>
                           <div className={`${_collapsedProcess ? 'h-0' : 'h-auto'} overflow-hidden`}>
@@ -557,7 +631,7 @@ function StatisticsPage() {
                                   <I18N index='statistics_heading_stopped_at' text='Stopped At' />
                                 </h2>
                                 <div className='w-full truncate text-center'>
-                                  {process.stoppedAt ? formatTimestampToDate(process.stoppedAt) : getTranslation('statistics_text_still_running', 'Still Running')}
+                                  {process.stoppedAt ? formatTimestampToDate(process.stoppedAt) : <I18N index="statistics_text_still_running" text="Still Running" />}
                                 </div>
                               </div>
                             </div>

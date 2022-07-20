@@ -29,7 +29,8 @@ module.exports = {
         'slate-550': '#56657A'
       },
       transitionProperty: {
-        'header': 'top, margin, left, right, transform'
+        'header': 'top, margin, left, right, transform',
+        'tooltip': 'top, left, width, height, opacity, transform'
       },
       transitionTimingFunction: {
         'bounce-in': 'cubic-bezier(1, -0.5, 0, 1.5)',

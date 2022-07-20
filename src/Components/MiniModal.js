@@ -3,7 +3,8 @@ import { useDispatch, useSelector } from "react-redux";
 import { FaCheck, FaTimes } from "react-icons/fa";
 import { Transition } from "@headlessui/react";
 import { setNotification } from "../redux/reducers/UI";
-import { getTranslation } from "../extra/I18N";
+import I18N, { getTranslation } from "../extra/I18N";
+import Tooltip from "./Tooltip";
 
 function MiniModal({ title, type, show, onHide, onSubmit, items, edit }) {
   const isDev = useSelector(({ electron }) => electron.settings.appIsDev);
@@ -227,10 +228,18 @@ function MiniModal({ title, type, show, onHide, onSubmit, items, edit }) {
               <div className="flex columns-1 py-3">
                 {items.length === 1 ? (
                   <React.Fragment>
-                    <button title={getTranslation('general_text_submit', 'Submit')} onClick={() => onInputSubmit(state)} className="inline-flex border-[1px] border-r-0 border-slate-500 rounded-l-lg p-2 bg-green-300 hover:bg-green-500">
-                      <span className="sr-only">{getTranslation('general_text_submit')}</span>
-                      <FaCheck className="w-[24px] h-[24px]" aria-hidden="true" />
-                    </button>
+                    <Tooltip
+                      id={`tooltip_submit`}
+                      placement="leftTop"
+                      content={(
+                        <h2 className="font-bold"><I18N index="general_text_submit" text="Submit" /></h2>
+                      )}
+                    >
+                      <button onClick={() => onInputSubmit(state)} className="inline-flex border-[1px] border-r-0 border-slate-500 rounded-l-lg p-2 bg-green-300 hover:bg-green-500">
+                        <span className="sr-only">{getTranslation('general_text_submit')}</span>
+                        <FaCheck className="w-[24px] h-[24px]" aria-hidden="true" />
+                      </button>
+                    </Tooltip>
                     <input
                       ref={inputField}
                       value={state[items[0].name]}
@@ -244,10 +253,18 @@ function MiniModal({ title, type, show, onHide, onSubmit, items, edit }) {
                       placeholder={items[0]?.placeholder}
                       className="border-[1px] border-slate-500 pl-2 w-full"
                     />
-                    <button title={getTranslation('general_text_cancel', 'Cancel')} onClick={onClose} className="border-[1px] border-l-0 border-slate-500 rounded-r-lg p-2 bg-red-300 hover:bg-red-500">
-                      <span className="sr-only">{getTranslation('general_text_cancel')}</span>
-                      <FaTimes className="w-[24px] h-[24px]" aria-hidden="true" />
-                    </button>
+                    <Tooltip
+                      id={`tooltip_cancel`}
+                      placement="rightTop"
+                      content={(
+                        <h2 className="font-bold"><I18N index="general_text_cancel" text="Cancel" /></h2>
+                      )}
+                    >
+                      <button onClick={onClose} className="border-[1px] border-l-0 border-slate-500 rounded-r-lg p-2 bg-red-300 hover:bg-red-500">
+                        <span className="sr-only">{getTranslation('general_text_cancel')}</span>
+                        <FaTimes className="w-[24px] h-[24px]" aria-hidden="true" />
+                      </button>
+                    </Tooltip>
                   </React.Fragment>
                 ) : (
                   <React.Fragment>
@@ -256,14 +273,30 @@ function MiniModal({ title, type, show, onHide, onSubmit, items, edit }) {
                         {inputElements}
                       </div>
                       <div className="flex columns-2 gap-4 w-full pt-3">
-                        <button title={getTranslation('general_text_submit', 'Submit')} onClick={() => onInputSubmit(state)} className="flex justify-center w-full border-[1px] border-slate-500 rounded-lg p-2 bg-green-300 hover:bg-green-500">
-                          <span className="sr-only">{getTranslation('general_text_submit')}</span>
-                          <FaCheck className="w-[24px] h-[24px]" aria-hidden="true" />
-                        </button>
-                        <button title={getTranslation('general_text_cancel', 'Cancel')} onClick={onClose} className="flex justify-center w-full border-[1px] border-slate-500 rounded-lg p-2 bg-red-300 hover:bg-red-500">
-                          <span className="sr-only">{getTranslation('general_text_cancel')}</span>
-                          <FaTimes className="w-[24px] h-[24px]" aria-hidden="true" />
-                        </button>
+                        <Tooltip
+                          id={`tooltip_submit`}
+                          placement="rightTop"
+                          content={(
+                            <h2 className="font-bold"><I18N index="general_text_submit" text="Submit" /></h2>
+                          )}
+                        >
+                          <button onClick={() => onInputSubmit(state)} className="flex justify-center w-full border-[1px] border-slate-500 rounded-lg p-2 bg-green-300 hover:bg-green-500">
+                            <span className="sr-only">{getTranslation('general_text_submit')}</span>
+                            <FaCheck className="w-[24px] h-[24px]" aria-hidden="true" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip
+                          id={`tooltip_cancel`}
+                          placement="rightTop"
+                          content={(
+                            <h2 className="font-bold"><I18N index="general_text_cancel" text="Cancel" /></h2>
+                          )}
+                        >
+                          <button onClick={onClose} className="flex justify-center w-full border-[1px] border-slate-500 rounded-lg p-2 bg-red-300 hover:bg-red-500">
+                            <span className="sr-only">{getTranslation('general_text_cancel')}</span>
+                            <FaTimes className="w-[24px] h-[24px]" aria-hidden="true" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </div>
                   </React.Fragment>

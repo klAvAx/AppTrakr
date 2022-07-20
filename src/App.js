@@ -9,6 +9,7 @@ import routes from "./extra/routes";
 import Header from "./Fragments/Header/Header";
 import Notification from "./Components/Notification";
 import Backdrop from "./Components/Backdrop";
+import Tooltip from "./Components/Tooltip";
 
 // TODO some language lines require inflections
 // TODO update whole app into separate Electron & UI repos
