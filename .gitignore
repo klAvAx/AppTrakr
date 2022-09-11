@@ -7,3 +7,6 @@ node_modules/
 # Jetbrains IDEA
 *.iml
 .idea/
+
+# Local Stuff
+Issues/

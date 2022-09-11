@@ -12,6 +12,7 @@ let _config = {
   langDir: null
 };
 
+// TODO separate this out to a git module
 function i18n(config) {
   _config.language = config.lang;
   

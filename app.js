@@ -6,18 +6,18 @@ const fs = require("fs");
 const url = require("url");
 const util = require("util");
 const path = require("path");
-const config = require(path.join(__dirname, "../package.json"));
+const config = require(path.join(__dirname, "package.json"));
 
 const contextMenu = require("electron-context-menu");
 const isDev = require("electron-is-dev");
 const Store = require("electron-store");
 const settings = new Store({ name: "Settings" });
 
+const DiscordRPC = require("discord-rpc");
+const DiscordAID = "...Discord Application ID...";
+
 // Setup App Directory
-if (
-  !fs.existsSync(path.join(app.getPath("documents"), config.title)) ||
-  !fs.existsSync(path.join(app.getPath("documents"), config.title, "languages"))
-) {
+if (!fs.existsSync(path.join(app.getPath("documents"), config.title)) || !fs.existsSync(path.join(app.getPath("documents"), config.title, "languages"))) {
   if(!fs.existsSync(path.join(app.getPath("documents"), config.title))) {
     fs.mkdirSync(path.join(app.getPath("documents"), config.title));
   }
@@ -25,20 +25,34 @@ if (
   if (!fs.existsSync(path.join(app.getPath("documents"), config.title, "languages")) && !isDev) {
     fs.mkdirSync(path.join(app.getPath("documents"), config.title, "languages"));
     
-    let files = fs.readdirSync(path.join(__dirname, '..', 'ElectronLibs', 'translations'));
+    let files = fs.readdirSync(path.join(__dirname, 'ElectronLibs', 'translations'));
     
     for(const file of files) {
       if(file.endsWith(".json")) {
         fs.copyFileSync(
-          path.join(__dirname, '..', 'ElectronLibs', 'translations', file),
+          path.join(__dirname, 'ElectronLibs', 'translations', file),
+          path.join(app.getPath("documents"), config.title, "languages", file)
+        );
+      }
+    }
+  }
+} else {
+  // Update Lang files if they are newer
+  let files = fs.readdirSync(path.join(__dirname, 'ElectronLibs', 'translations'));
+  for(const file of files) {
+    if(file.endsWith(".json")) {
+      let sourcePath = path.join(__dirname, 'ElectronLibs', 'translations', file);
+      let targetPath = path.join(app.getPath("documents"), config.title, "languages", file);
+      
+      if(fs.statSync(sourcePath).mtimeMs > fs.statSync(targetPath).mtimeMs) {
+        fs.copyFileSync(
+          path.join(__dirname, 'ElectronLibs', 'translations', file),
           path.join(app.getPath("documents"), config.title, "languages", file)
         );
       }
     }
   }
 }
-// TODO scan for language updates & move to app documents folder
-
 
 // Init App Database
 const knex = require('knex')({
@@ -52,13 +66,13 @@ knex.raw('PRAGMA foreign_keys = ON').then(() => {
   if (isDev) console.log(`Foreign Key Check Activated`);
 });
 
+// Keep some global references of objects.
+let i18n, tray, trayWindow, processList;
+let discordClient, settingsDiscordEnabled, discordTimer, discordActivitySet;
+
 // Init Settings
 let appIsPinned = false;
 initSettings();
-
-// Keep a global reference of the window object, if you don't, the window will
-// be closed automatically when the JavaScript object is garbage collected.
-let i18n, tray, trayWindow, processList;
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -76,7 +90,7 @@ if (!singleLock) {
   
   app.on('ready', function () {
     // Init i18n
-    i18n = new (require('../ElectronLibs/translations/i18n'))({
+    i18n = new (require('./ElectronLibs/translations/i18n'))({
       lang: settings.get('app.lang', 'sys'),
       dir: isDev ? null : path.join(app.getPath("documents"), config.title, "languages")
     });
@@ -91,7 +105,7 @@ if (!singleLock) {
     createTrayWindow();
     
     // Begin Process List Watching
-    processList = new (require('../ElectronLibs/processList/processList'))({
+    processList = new (require('./ElectronLibs/processList/processList'))({
       initialDelay: settings.get('app.processListInitial', 5),
       recurringDelay: settings.get('app.processListRecurring', 1)
     });
@@ -256,7 +270,11 @@ app.on('before-quit', async function (event) {
 // Rest of the APP
 
 function createTray() {
-  tray = new Tray(path.join(__dirname, '..', 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64.png' : 'tray_64x64_black.png')));
+  tray = new Tray(
+    settings.get("app.recordingProcesses", false) ?
+      path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64_rec.png' : 'tray_64x64_black_rec.png')) :
+      path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64.png' : 'tray_64x64_black.png'))
+  );
   
   // Context Menu
   const contextMenu = Menu.buildFromTemplate([
@@ -304,10 +322,12 @@ function createTrayWindow() {
     resizable: true,
     skipTaskbar: true,
     focusable: true,
+    transparent: true,
     webPreferences: {
       nodeIntegration: false,
-      contextIsolation: false,
-      preload: path.join(__dirname, '../assets/js/preload.js')
+      preload: path.join(__dirname, 'assets', 'js', 'preload.js'),
+      sandbox: true,
+      contextIsolation: true
     }
   });
   
@@ -322,13 +342,13 @@ function createTrayWindow() {
     
     installExtension(REACT_DEVELOPER_TOOLS)
       .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log('An error occurred: ', err));
+      .catch((err) => console.error('An error occurred: ', err));
     installExtension(REDUX_DEVTOOLS)
       .then((name) => console.log(`Added Extension:  ${name}`))
-      .catch((err) => console.log('An error occurred: ', err));
+      .catch((err) => console.error('An error occurred: ', err));
   } else {
     // Load Entry Point Page of the APP
-    trayWindow.loadFile(path.join(__dirname, "../build/index.html"));
+    trayWindow.loadFile(path.join(__dirname, 'ui', 'build', 'index.html'));
   }
   
   // While loading the page, the ready-to-show event will be emitted
@@ -376,6 +396,7 @@ function createTrayWindow() {
   }
 }
 
+/* <editor-fold desc="* Async Functions *"> */
 /*******************
  * Async Functions *
  *******************/
@@ -389,11 +410,43 @@ ipcMain.on('trayWindow', function (event, data) {
       trayWindow.webContents.openDevTools();
       break;
     }
+    case "zoomIn": {
+      let zoom = trayWindow.webContents.getZoomLevel();
+      zoom += 1;
+      trayWindow.webContents.setZoomLevel(zoom);
+      break;
+    }
+    case "zoomOut": {
+      let zoom = trayWindow.webContents.getZoomLevel();
+      zoom -= 1;
+      trayWindow.webContents.setZoomLevel(zoom);
+      break;
+    }
+    case "zoomReset": {
+      trayWindow.webContents.setZoomLevel(0);
+      break;
+    }
     default: {
       if(isDev) {
         console.log('[main.js]', '[ipcMain]', '[onTrayWindow]', data);
       }
       break;
+    }
+  }
+});
+ipcMain.handle('i18n', function (event, data) {
+  switch (data.action) {
+    case 'translate': {
+      return i18n.__(data.key, data.value);
+    }
+    case 'getLangList': {
+      return i18n.getLangList();
+    }
+    default: {
+      if(isDev) {
+        console.log('[main.js]', '[ipcMain]', '[onI18N]', data);
+        return "???";
+      }
     }
   }
 });
@@ -440,17 +493,6 @@ ipcMain.on('general', function (event, data) {
 });
 ipcMain.on('generalSync', async function (event, data) {
   switch (data.action) {
-    case "initI18N": {
-      event.returnValue = {
-        lang: settings.get('app.lang', 'sys'),
-        dir: isDev ? null : path.join(app.getPath("documents"), config.title, "languages")
-      };
-      break;
-    }
-    case "getLocale": {
-      event.returnValue = app.getLocale();
-      break;
-    }
     default: {
       if(isDev) {
         console.log('[main.js]', '[ipcMain]', '[onGeneralSync]', data);
@@ -467,7 +509,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           settings.set('app.processListInitial', data.payload.value);
           return {
             setting: data.payload.setting,
-            value: settings.get('app.processListInitial', 1)
+            value: settings.get('app.processListInitial', 5)
           };
         }
         case "appProcessListRecurring": {
@@ -491,9 +533,15 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             setting: data.payload.setting,
             value: settings.get('app.lang', 'sys')
           };
+        case "appTheme":
+          settings.set('app.theme', data.payload.value);
+          return {
+            setting: data.payload.setting,
+            value: settings.get('app.theme', 'sys')
+          }
         default: {
           if(isDev) {
-            console.log('[main.js]', '[ipcMain]', '[handleGeneralSync]', data.payload);
+            console.log('[main.js]', '[ipcMain]', '[handleGeneralInvoke]', '[setAppSetting]', data.payload);
           }
           break;
         }
@@ -510,6 +558,12 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           };
         case "appRecordingProcesses":
           settings.set("app.recordingProcesses", !settings.get('app.recordingProcesses', false));
+          
+          tray.setImage(settings.get("app.recordingProcesses", false) ?
+            path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64_rec.png' : 'tray_64x64_black_rec.png')) :
+            path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64.png' : 'tray_64x64_black.png'))
+          );
+          
           return {
             setting: data.payload,
             value: settings.get('app.recordingProcesses', false)
@@ -521,10 +575,10 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             value: settings.get('app.statistics.collapsedGroupsByDefault', true)
           }
         case "appStatisticsShowElapsedDays":
-          settings.set("app.statistics.showElapsedDays", !settings.get('app.statistics.showElapsedDays', true));
+          settings.set("app.statistics.showElapsedDays", !settings.get('app.statistics.showElapsedDays', false));
           return {
             setting: data.payload,
-            value: settings.get('app.statistics.showElapsedDays', true)
+            value: settings.get('app.statistics.showElapsedDays', false)
           }
         case "appIsPinned": {
           appIsPinned = !appIsPinned;
@@ -533,9 +587,21 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             value: appIsPinned
           }
         }
+        case "appAllowInternetConnectivity":
+          settings.set("app.allowInternetConnectivity", !settings.get('app.allowInternetConnectivity', false));
+          return {
+            setting: data.payload,
+            value: settings.get('app.allowInternetConnectivity', false)
+          }
+        case "appDiscordEnabled":
+          settings.set("app.discord.enabled", !settings.get('app.discord.enabled', false));
+          return {
+            setting: data.payload,
+            value: settings.get('app.discord.enabled', false)
+          }
         default: {
           if (isDev) {
-            console.log('[main.js]', '[ipcMain]', '[handleGeneralSync]', data);
+            console.log('[main.js]', '[ipcMain]', '[handleGeneralInvoke]', '[toggleAppSetting]', data);
           }
           break;
         }
@@ -546,20 +612,31 @@ ipcMain.handle('generalInvoke', async function (event, data) {
       return {
         request: data,
         response: {
-          appIsDev: isDev,
-          appVersion: config.version,
-          appIsPinned: appIsPinned,
-          appLang: settings.get('app.lang', 'sys'),
-          appAutoStart: app.getLoginItemSettings().openAtLogin,
-          appTheme: (nativeTheme.shouldUseDarkColors ? "dark" : "light"),
-          appProcessListInitial: settings.get('app.processListInitial', 1),
-          appProcessListRecurring: settings.get('app.processListRecurring', 1),
-          appRecordingProcesses: settings.get('app.recordingProcesses', false),
-          appStatisticsLatestTitleCount: settings.get('app.statistics.latestTitleCount', 3),
-          appStatisticsCollapsedGroupsByDefault: settings.get('app.statistics.collapsedGroupsByDefault', true),
-          appStatisticsShowElapsedDays: settings.get('app.statistics.showElapsedDays', false)
+          settings: {
+            appIsDev: isDev,
+            appVersion: config.version,
+            appIsPinned: appIsPinned,
+            appLang: settings.get('app.lang', 'sys'),
+            appAutoStart: app.getLoginItemSettings().openAtLogin,
+            appTheme: settings.get('app.theme', 'sys'),
+            appAllowInternetConnectivity: settings.get('app.allowInternetConnectivity', false),
+            appDiscordEnabled: settings.get('app.discord.enabled', false),
+            appProcessListInitial: settings.get('app.processListInitial', 5),
+            appProcessListRecurring: settings.get('app.processListRecurring', 1),
+            appRecordingProcesses: settings.get('app.recordingProcesses', false),
+            appStatisticsLatestTitleCount: settings.get('app.statistics.latestTitleCount', 3),
+            appStatisticsCollapsedGroupsByDefault: settings.get('app.statistics.collapsedGroupsByDefault', true),
+            appStatisticsShowElapsedDays: settings.get('app.statistics.showElapsedDays', false)
+          },
+          filters: settings.get('app.filters', {})
         }
       };
+    }
+    case "getSystemTheme": {
+      return {
+        request: data,
+        response: (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+      }
     }
     
     case "getDataOfType": {
@@ -650,27 +727,36 @@ ipcMain.handle('generalInvoke', async function (event, data) {
       return await getStatistics();
     }
     
-    case "setGroupOffset": {
-      let response;
+    case "updateAppFilters": {
+      let response = null;
       
-      try {
-        let GroupID = data.payload.groupID;
-        let GroupOffset = data.payload.groupOffset;
-        response = await knex("groups").where('id', '=', GroupID).update('viewOffset', GroupOffset);
-      } catch (error) {
-        response = error;
-      }
-  
-      if (typeof response?.code === "string") {
-        response = {
-          type: "error",
-          error: {
-            errno: response.errno,
-            code: response.code
+      if(!data?.payload?.groupID) return {request: data, response: {status: 0, code: "noGroupID"}};
+      if(!data?.payload?.filterType) return {request: data, response: {status: 0, code: "noFilterType"}};
+      
+      if(data.payload.filterType === "clear") {
+        if(settings.has(`app.filters.${data.payload.groupID}`)) {
+          settings.delete(`app.filters.${data.payload.groupID}`);
+          response = {status: 1, code: "cleared"};
+        }
+      } else {
+        if(data?.payload?.filterData) {
+          settings.set(`app.filters.${data.payload.groupID}.${data.payload.filterType}`, data.payload.filterData);
+          response = {status: 1, code: "set"};
+        } else {
+          if(settings.has(`app.filters.${data.payload.groupID}.${data.payload.filterType}`)) {
+            settings.delete(`app.filters.${data.payload.groupID}.${data.payload.filterType}`);
+            
+            if(Object.keys(settings.get(`app.filters.${data.payload.groupID}`, {})).length === 0) {
+              settings.delete(`app.filters.${data.payload.groupID}`);
+            }
+            
+            response = {status: 1, code: "deleted"};
           }
-        };
+        }
       }
-  
+      
+      if(response === null) response = {status: 1, code: "nothingDone"};
+      
       return {
         request: data,
         response: response
@@ -685,7 +771,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
       } catch (error) {
         response = error;
       }
-  
+      
       if (typeof response?.code === "string") {
         response = {
           type: "error",
@@ -695,7 +781,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           }
         };
       }
-  
+      
       return {
         request: data,
         response: response
@@ -710,7 +796,8 @@ ipcMain.handle('generalInvoke', async function (event, data) {
     }
   }
 });
-
+/* </editor-fold> */
+/* <editor-fold desc="* Recording Functions *"> */
 /**********************
  * Recording Functions *
  **********************/
@@ -856,7 +943,8 @@ async function stopRecording() {
     return -1;
   }
 }
-
+/* </editor-fold> */
+/* <editor-fold desc="* Window Functions *"> */
 /********************
  * Window Functions *
  ********************/
@@ -931,7 +1019,8 @@ function getTrayPosition() {
   
   return output;
 }
-
+/* </editor-fold> */
+/* <editor-fold desc="* Utility Functions *"> */
 /*********************
  * Utility Functions *
  *********************/
@@ -953,8 +1042,10 @@ function autoStart(isEnabled) {
 function initSettings() {
   if (!settings.get('settingsInit', false)) {
     // Initial General Settings
-    settings.set('app.lang', 'sys');
     autoStart(false);
+    settings.set('app.lang', 'sys');
+    settings.set('app.theme', 'sys');
+    settings.set('app.allowInternetConnectivity', false);
     
     // App Specific
     settings.set('app.recordingProcesses', false);
@@ -993,19 +1084,30 @@ function initSettings() {
       return knex.schema.createTable('groups', function (t) {
         t.bigIncrements('id').unsigned().primary();
         t.string('name', 255).unique().notNullable();
-        t.timestamp('viewOffset').defaultTo(0);
+        
+        // Discord Rich Presence
+        t.string('discordIcon').defaultTo(null);
+        t.string('discordNiceName').defaultTo(null);
+        t.boolean('discordShowPresence').defaultTo(false);
+        
         t.timestamp('created_at').defaultTo(knex.fn.now());
         t.timestamp('updated_at').defaultTo(knex.fn.now());
       });
     } else {
-      knex.schema.hasColumn('groups', 'viewOffset')
-        .then(function (col) {
-          if(!col) {
-            return knex.schema.table('groups', function (table) {
-              table.timestamp('viewOffset').after('name').defaultTo(0);
-            });
-          }
-        })
+      knex.schema.hasColumn('groups', 'viewOffset').then(function (col) {
+        if(col) {
+          return knex.schema.table('groups', function (table) {
+            table.dropColumn('viewOffset');
+          });
+        }
+      });
+      knex.schema.hasColumn('groups', 'discordIcon').then(function (col) {
+        if(!col) {
+          return knex.schema.table('groups', function (table) {
+            table.string('discordIcon').defaultTo(null);
+          });
+        }
+      });
     }
   });
   knex.schema.hasTable('rules').then(function (exists) {
@@ -1015,11 +1117,31 @@ function initSettings() {
         t.bigInteger('group_id').unsigned().notNullable();
         t.text("rule").notNullable();
         t.string("type", 4).notNullable();
+        
+        // Discord Rich Presence
+        t.string('discordNiceName').defaultTo(null);
+        t.boolean('discordShowPresence').defaultTo(false);
+        
         t.timestamp('created_at').defaultTo(knex.fn.now());
         t.timestamp('updated_at').defaultTo(knex.fn.now());
-  
+        
         t.unique(['group_id', 'rule', 'type'], {indexName: 'group_rule_type'});
         t.foreign("group_id").references("groups.id").onDelete("CASCADE");
+      });
+    } else {
+      knex.schema.hasColumn('rules', 'discordNiceName').then(function (col) {
+        if(!col) {
+          return knex.schema.table('rules', function (table) {
+            table.string('discordNiceName').defaultTo(null);
+          });
+        }
+      });
+      knex.schema.hasColumn('rules', 'discordShowPresence').then(function (col) {
+        if(!col) {
+          return knex.schema.table('rules', function (table) {
+            table.boolean('discordShowPresence').defaultTo(false);
+          });
+        }
       });
     }
   });
@@ -1038,6 +1160,83 @@ function initSettings() {
       });
     }
   });
+  
+  // IF Internet Connectivity is allowed
+  settings.onDidChange('app.allowInternetConnectivity', function (newValue) {
+    if(newValue) {
+      // enable Internet modules
+      initDiscord();
+    } else {
+      // disable Internet modules
+      deInitDiscord();
+      if(settingsDiscordEnabled) settingsDiscordEnabled();
+    }
+  });
+  if(settings.get('app.allowInternetConnectivity', false)) {
+    // Discord
+    initDiscord();
+  }
+}
+function initDiscord() {
+  settingsDiscordEnabled = settings.onDidChange('app.discord.enabled', function (newValue) {
+    if(newValue) {
+      // setup periodical activity update
+      DiscordRPC.register(DiscordAID);
+      discordClient = new DiscordRPC.Client({ transport: 'ipc' });
+      discordClient.on('ready', () => {
+        discordTimer = setInterval(updateDiscordActivity, 15000);
+      });
+      discordClient.login({ clientId: DiscordAID }).catch(console.error);
+    } else {
+      // stop it
+      deInitDiscord();
+    }
+  });
+  if(settings.get('app.discord.enabled', false)) {
+    DiscordRPC.register(DiscordAID);
+    discordClient = new DiscordRPC.Client({ transport: 'ipc' });
+    discordClient.on('ready', () => {
+      discordTimer = setInterval(updateDiscordActivity, 15000);
+    });
+    discordClient.login({ clientId: DiscordAID }).catch(console.error);
+  }
+}
+function deInitDiscord() {
+  if(discordTimer) {
+    clearInterval(discordTimer);
+    discordTimer = null;
+  }
+  if(discordClient) discordClient.destroy();
+}
+function updateDiscordActivity() {
+  if(settings.get('app.recordingProcesses', false)) {
+    getLatestTrackedAppForDiscord().then((processes) => {
+      const process = processes?.[0];
+    
+      if(discordClient) {
+        if(process && process?.showDetails) {
+          let activity = {
+            details: process?.discordDetails ? process.discordDetails : '',
+            startTimestamp: Math.floor(process.startedAt / 1000),
+            instance: false
+          };
+        
+          if(process?.showState) activity.state = process.discordState;
+          if(process?.discordIcon) activity.largeImageKey = process.discordIcon;
+        
+          discordClient.setActivity(activity).then((success) => {
+            discordActivitySet = true;
+          });
+        } else {
+          if(discordActivitySet) {
+            discordClient.clearActivity().then((success) => {
+              discordActivitySet = false;
+            });
+          }
+        }
+      }
+    });
+  }
 }
 
 async function sendStatisticsUpdate() {
@@ -1051,19 +1250,66 @@ async function sendStatisticsUpdate() {
 }
 
 async function getStatistics() {
+  const groups = await knex
+    .select('id', 'name')
+    .orderBy([{ column: 'id', order: 'asc' }])
+    .from('groups');
+  
+  for(const groupIndex in groups) {
+    const group = groups[groupIndex];
+    const groupFilters = settings.get(`app.filters.${group.id}`, {});
+    let filterQuery = "";
+    
+    if(Object.keys(groupFilters).length) {
+      for(const column in groupFilters) {
+        switch (column) {
+          case "query": {
+            filterQuery += `${filterQuery.length ? ' AND ' : ''}statistics.processMeta LIKE '%${groupFilters[column]}%'`;
+            break;
+          }
+          case "from": {
+            filterQuery += `${filterQuery.length ? ' AND ' : ''}statistics.started_at >= ${groupFilters[column]}`;
+            break;
+          }
+          case "to": {
+            filterQuery += `${filterQuery.length ? ' AND ' : ''}statistics.stopped_at <= ${groupFilters[column]}`;
+            break;
+          }
+        }
+      }
+    }
+    
+    groups[groupIndex]['filtered'] = !!filterQuery;
+    groups[groupIndex]['items'] = await knex
+      .select('statistics.id as id', 'statistics.processMeta as processMeta', 'statistics.started_at as startedAt', 'statistics.stopped_at as stoppedAt')
+      .select('rules.id as rule_id', 'rules.group_id as rule_group_id', 'rules.rule as rule_rule', 'rules.type as rule_type')
+      .leftJoin('rules', 'statistics.rule_id', 'rules.id')
+      .where('statistics.group_id', "=", group.id)
+      .whereRaw(filterQuery)
+      .orderBy([{ column: 'statistics.started_at', order: 'asc' }])
+      .from('statistics');
+  }
+  
+  return groups;
+}
+
+async function getLatestTrackedAppForDiscord() {
   return knex
-    .select('statistics.id as id', 'statistics.processMeta as processMeta', 'statistics.started_at as startedAt', 'statistics.stopped_at as stoppedAt')
-    .select('rules.id as rule_id', 'rules.group_id as rule_group_id', 'rules.rule as rule_rule', 'rules.type as rule_type')
-    .select('groups.id as group_id', 'groups.name as group_name', 'groups.viewOffset as group_offset')
+    .select('groups.discordIcon as discordIcon', 'groups.discordNiceName as discordDetails', 'groups.discordShowPresence as showDetails')
+    .select('rules.discordNiceName as discordState', 'rules.discordShowPresence as showState')
+    .select('statistics.started_at as startedAt')
     .leftJoin('rules', 'statistics.rule_id', 'rules.id')
     .leftJoin('groups', function () {
       this.on('groups.id', '=', 'statistics.group_id').andOn('groups.id', '=', 'rules.group_id');
     })
-    .whereRaw('statistics.started_at >= groups.viewOffset')
-    .orderBy([{ column: 'groups.id', order: 'asc' }, { column: 'statistics.started_at', order: 'asc' }])
+    .whereNull('statistics.stopped_at')
+    .where('groups.discordShowPresence', true)
+    .orderBy([{ column: 'statistics.started_at', order: 'desc' }])
+    .limit(1)
     .from('statistics');
 }
-
+/* </editor-fold> */
+/* <editor-fold desc="* Extensions *"> */
 /**************
  * Extensions *
  **************/
@@ -1075,3 +1321,4 @@ if (!String.format) {
     });
   };
 }
+/* </editor-fold> */

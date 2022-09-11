@@ -1,10 +1,10 @@
 {
   "name": "apptrakr",
   "title": "App Trakr",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Service based launched application tracker",
   "private": true,
-  "main": "public/electron.js",
+  "main": "app.js",
   "build": {
     "appId": "com.klavax.apptrackr",
     "productName": "AppTrackr",
@@ -14,8 +14,10 @@
     ],
     "files": [
       "!app.db",
+      "app.js",
       "assets/**/*.{ico,png,js}",
-      "ElectronLibs/**/*.{json,js}"
+      "ElectronLibs/**/*.{json,js}",
+      "ui/build/**/*.*"
     ],
     "directories": {
       "output": "release"
@@ -47,70 +49,45 @@
     }
   },
   "scripts": {
-    "postinstall": "electron-builder install-app-deps",
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "clean": "concurrently \"rimraf -r build\" \"rimraf -r release/win-unpacked\" \"rimraf -r release/builder-debug.yml\" \"rimraf -r release/builder-effective-config.yaml\" \"rimraf -r app.db\"",
-    "electron-start": "concurrently \"cross-env BROWSER=none npm start\" \"wait-on http://localhost:3000 && electron --trace-warnings .\"",
-    "electron-rebuild": ".\\node_modules\\.bin\\electron-rebuild",
-    "electron-package": "npm run build && electron-builder --dir && rimraf -r build",
-    "electron-distribute": "npm run build && electron-builder && rimraf -r build"
+    "postinstall": "npm install --prefix ui",
+    "dev": "concurrently \"cross-env BROWSER=none npm run startUI\" \"wait-on http://localhost:3000 && npm run startNODE\"",
+    "clean": "concurrently \"rimraf -r ui/build\" \"rimraf -r release/win-unpacked\" \"rimraf -r release/builder-debug.yml\" \"rimraf -r release/builder-effective-config.yaml\" \"rimraf -r app.db\"",
+    "start": "electron .",
+    "startNODE": "nodemon --watch . --exec \"npm run start\" --ignore \"ui/*\" --ignore \"assets/*\" --ignore \"ElectronLibs/translations/*.json\"",
+    "startUI": "npm start --prefix ui",
+    "rebuild": ".\\node_modules\\.bin\\electron-rebuild",
+    "package": "npm run build --prefix ui && electron-builder --dir",
+    "distribute": "npm run build --prefix ui && electron-builder && rimraf -r ui/build"
   },
   "author": {
     "name": "Aldas Švambaris",
     "email": "aldas.svambaris@gmail.com",
     "url": "https://klavax.com"
   },
-  "homepage": "./",
+  "homepage": "https://klavax.com",
   "license": "GNU GPLv3",
   "keywords": [],
   "devDependencies": {
-    "autoprefixer": "^10.4.0",
-    "concurrently": "^6.5.1",
+    "concurrently": "^7.3.0",
     "copyfiles": "^2.4.1",
     "cross-env": "^7.0.3",
-    "electron": "^16.0.5",
-    "electron-builder": "^22.14.5",
+    "electron": "^20.1.1",
+    "electron-builder": "^23.3.3",
     "electron-devtools-installer": "^3.2.0",
-    "electron-packager": "^15.4.0",
+    "electron-packager": "^16.0.0",
     "electron-rebuild": "^3.2.5",
-    "postcss": "^8.4.5",
+    "nodemon": "^2.0.16",
     "rimraf": "^3.0.2",
-    "tailwindcss": "^3.0.7",
     "wait-on": "^6.0.0"
   },
   "dependencies": {
-    "@headlessui/react": "^1.4.2",
-    "@reduxjs/toolkit": "^1.7.1",
+    "discord-rpc": "^4.0.1",
+    "discord.js": "^14.3.0",
     "electron-context-menu": "^3.1.1",
     "electron-is-dev": "^2.0.0",
     "electron-store": "^8.0.1",
-    "knex": "^0.95.14",
-    "prop-types": "^15.8.0",
-    "ps-list": "^7.2.0",
-    "react": "^17.0.2",
-    "react-dom": "^17.0.2",
-    "react-icons": "^4.4.0",
-    "react-redux": "^7.2.6",
-    "react-router-dom": "^5.3.0",
-    "react-scripts": "^5.0.0",
+    "knex": "^2.3.0",
+    "ps-list": "^8.1.0",
     "sqlite3": "^5.0.2"
-  },
-  "eslintConfig": {
-    "extends": "react-app"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
   }
 }
