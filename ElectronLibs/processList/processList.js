@@ -15,6 +15,7 @@ let config = {
 let processList = [], prevProcessList = [];
 let platform, release, timer;
 
+// TODO redo this from the ground up!
 class ps extends EventEmitter {
   constructor({initialDelay, recurringDelay}) {
     super();
@@ -30,6 +31,27 @@ class ps extends EventEmitter {
       console.log("======== PROCESS LIST JS ==========");
       console.log(`Platform:\t${platform}\nArch:\t${os.arch()}\nRelease:\t${release}\nVersion:\t${os.version()}`);
       console.log("===================================");
+    }
+    
+    // Linux Dependency
+    if(platform === "linux") {
+      childProcess
+        .exec(
+          'which wmctrl',
+          {
+            windowsHide: true,
+            encoding: 'utf-8'
+          },
+          (error, stdout, stderr) => {
+            if(error || stdout.trim().length === 0) {
+              // TODO: npm i alert
+              //   alert("Please install wmctrl package! and then restart this app");
+              console.error(error);
+              app.exit(error.code);
+              return;
+            }
+          }
+        );
     }
   
     timer = setTimeout(_getProcessList, config.initialReadDelay, this);
@@ -67,10 +89,167 @@ const _getProcessList = (psClass) => {
       // MACOSX processList
       // TODO command
       break;*/
-    /*case 'linux':
-      // LINUX processList
-      // TODO command
-      break;*/
+    case 'linux':
+      /**
+       * LINUX processList
+       *
+       * requires wmctrl if not installed prompt user to exit the app and install it!
+       *
+       * Tracking should prioritise Window ID followed by Process ID
+       *
+       * command to run & parse to get windows with pids: "wmctrl -lp"
+       * Returns Columns: "Window ID    Desktop ID    PID    Machine Name    Window Title"
+       *
+       * command to run & parse to get started time: "ps -p {$PID} -o pid,user,etimes,lstart,cmd -ww"
+       * Return Columns: "PID    USER    ELAPSED    STARTED    CMD"
+       */
+      try {
+        childProcess
+          .exec(
+            'wmctrl -lp',
+            {
+              windowsHide: true,
+              encoding: 'utf-8'
+            },
+            (error, stdout, stderr) => {
+              if(error || stdout.trim().length === 0) {
+                // TODO: npm i alert
+                //   alert("Please install wmctrl package! and then restart this app");
+                console.error(error);
+                return;
+              }
+        
+              if(!areObjectSame(processList, prevProcessList)) {
+                let added = processList.filter((x) => prevProcessList.findIndex((y) => y.Id === x.Id) === -1);
+                let removed = prevProcessList.filter((x) => processList.findIndex((y) => y.Id === x.Id) === -1);
+                let titleChanged = processList.filter((x) => prevProcessList.findIndex((y) => y.Id === x.Id && y.WindowTitle !== x.WindowTitle) !== -1);
+          
+                if(added.length > 0) {
+                  _this.emit("AddedToList", added);
+                  if(isDev) {
+                    console.log("processList.js", "emitted -> AddedToList");
+                  }
+                }
+                if(removed.length > 0) {
+                  _this.emit("RemovedFromList", removed);
+                  if(isDev) {
+                    console.log("processList.js", "emitted -> RemovedFromList");
+                  }
+                }
+                if(titleChanged.length > 0) {
+                  let oldTitles = prevProcessList.filter((x) => titleChanged.findIndex((y) => y.Id === x.Id) !== -1);
+                  _this.emit("TitleChanged", titleChanged, oldTitles);
+                  if(isDev) {
+                    console.log("processList.js", "emitted -> TitleChanged");
+                  }
+                }
+          
+                prevProcessList = processList;
+              }
+        
+              // Filter Process List
+              let _processList = stdout
+                .split(/\r?\n/)
+                .map((row, index) => {
+                  if(row.trim().length === 0) return "";
+            
+                  const _header = ['Id', 'screenID', 'processID', 'machineName'];
+                  let _data = {};
+            
+                  let _row = row.split(/ +/);
+            
+                  // Transform WMCTRL to Object
+                  for(let x = 0; x < _row.length; x++) {
+                    switch (x) {
+                      /* WINDOW ID [HEX] */
+                      case 0:
+                      /* SCREEN ID [INT] */
+                      case 1:
+                      /* PROCESS ID [INT] */
+                      case 2:
+                      /* MACHINE NAME [STRING] */
+                      case 3: {
+                        _data[_header[x]] = (x === 1 || x === 2 ? parseInt(_row[x]) : _row[x]);
+                        break;
+                      }
+                      /* WINDOW TITLE [STRING] */
+                      default: {
+                        _data['WindowTitle'] = (_data['WindowTitle'] ? _data['WindowTitle']+" " : "") + _row[x];
+                        break;
+                      }
+                    }
+                  }
+            
+                  // continue only if pid is != 0
+                  if(_data['processID'] === 0) return "";
+            
+                  // Get User, Elapsed, Started, CMD by process ID
+                  // Occasional error "Command failed: ps -p ${PID} -o pid,user,etimes,lstart,cmd -ww"
+                  try {
+                    let ps = childProcess.execSync(
+                      `ps -p ${_data['processID']} -o pid,user,etimes,lstart,cmd -ww`,
+                      {
+                        windowsHide: true,
+                        encoding: 'utf-8'
+                      }
+                    );
+                    let _ps = ps.trim().split(/\n/)[1].trim().split(/ +/);
+              
+                    // Extend Object to include User, Elapsed, Started & CMD
+                    for(let x = 0; x < _ps.length; x++) {
+                      switch (x) {
+                        case 0: {
+                          /* PID */
+                          break;
+                        }
+                        case 1: {
+                          /* USER */
+                          _data['user'] = _ps[x];
+                          break;
+                        }
+                        case 2: {
+                          /* ELAPSED */
+                          _data['elapsed'] = parseInt(_ps[x]);
+                          break;
+                        }
+                        case 3:
+                        case 4:
+                        case 5:
+                        case 6:
+                        case 7: {
+                          /* STARTED */
+                          _data['StartTime'] = (_data['StartTime'] ? _data['StartTime'] + " " : "") + _ps[x];
+                          break;
+                        }
+                        default: {
+                          /* CMD */
+                          _data['Executable'] = (_data['Executable'] ? _data['Executable'] + " " : "") + _ps[x];
+                          break;
+                        }
+                      }
+                    }
+              
+                    _data['StartTime'] = new Date(_data['StartTime']).getTime() / 1000
+              
+                    return _data;
+                  } catch (psError) {
+                    console.error('Error occurred while trying to ps');
+                    console.error(psError);
+                    return "";
+                  }
+                })
+                .filter(filterProcessListLinux);
+        
+              processList = _processList;
+              _this.emit("ListUpdate", _processList);
+              setTimeout(_getProcessList, config.recurringReadDelay, _this);
+            }
+          );
+      } catch (wmCtrlError) {
+        console.error('Error Occurred while trying to fetch open windows with wmctrl');
+        console.error(wmCtrlError);
+      }
+      break;
     case 'win32':
       /**
        * WINDOWS processList
@@ -95,7 +274,8 @@ const _getProcessList = (psClass) => {
           {
             windowsHide: true,
             encoding: 'utf-8'
-          }, (error, stdout, stderr) => {
+          },
+          (error, stdout, stderr) => {
             if(error) {
               console.error(error);
               app.exit(error.code);
@@ -133,7 +313,7 @@ const _getProcessList = (psClass) => {
             // Filter Process List
             let tasks = stdout
               .split(/\r?\r\n/)
-              .filter(filterProcessList);
+              .filter(filterProcessListWindows);
             
             // Remove CHCP response
             if(tasks[0].includes("65001")) {
@@ -175,7 +355,7 @@ const _getProcessList = (psClass) => {
           });
       break;
     default:
-      console.error(`Platform '${platform}' is not supported!`);
+      console.error('[processList.js]', `Platform '${platform}' is not supported!`);
       app.exit(1);
       break;
   }
@@ -214,7 +394,7 @@ const areObjectSame = (obj1, obj2) => {
   return same;
 }
 
-const filterProcessList = (row) => {
+const filterProcessListWindows = (row) => {
   if(row.length === 0) return false;
   
   let include = true;
@@ -241,6 +421,30 @@ const filterProcessList = (row) => {
   let _thisAppExecutable = (process.execPath.split(path.sep)[process.execPath.split(path.sep).length - 1]).toLowerCase();
   let _thisAppRegExp = new RegExp("\""+process.pid+"\",\""+_thisAppExecutable+"\"");
   include = include && !_thisAppRegExp.test(row.toLowerCase());
+  
+  return include;
+}
+
+const filterProcessListLinux = (row) => {
+  if(Object.keys(row).length === 0) return false;
+  
+  let include = true;
+  
+  /**
+   * exclude Misc. programs
+   */
+  include = include && !/(plasmashell)/.test(row['Executable'].toLowerCase());
+  
+  /**
+   * exclude Vendors
+   */
+  
+  /**
+   * exclude this App
+   */
+  let _thisAppExecutable = process.execPath;
+  let _thisAppPID = process.pid;
+  include = include && !(row['processID'] === _thisAppPID && row['Executable'].includes(_thisAppExecutable));
   
   return include;
 }

@@ -113,5 +113,8 @@
  "statistics_filter_too_strong": "Specified Filtering is too strict!",
  "statistics_group_has_no_items": "This Group does not have any Statistics to show.",
  "header_button_title_show_translatable": "Show Translatable text outlines",
- "header_button_title_hide_translatable": "Hide Translatable text outlines"
+ "header_button_title_hide_translatable": "Hide Translatable text outlines",
+ "general_text_undefined_rule_type": "Undefined Rule Type!",
+ "text_error_unknown_check_logs": "Unknown Error, Please Check the Logs if possible",
+ "text_error_database_entry_already_exists": "Entry in the database already exists"
 }

@@ -8,6 +8,7 @@ const util = require("util");
 const path = require("path");
 const config = require(path.join(__dirname, "package.json"));
 
+const positioner = require("electron-traywindow-positioner");
 const contextMenu = require("electron-context-menu");
 const isDev = require("electron-is-dev");
 const Store = require("electron-store");
@@ -15,6 +16,7 @@ const settings = new Store({ name: "Settings" });
 
 const DiscordRPC = require("discord-rpc");
 const DiscordAID = "...Discord Application ID...";
+const DiscordSEC = "...Discord Application Secret...";
 
 // Setup App Directory
 if (!fs.existsSync(path.join(app.getPath("documents"), config.title)) || !fs.existsSync(path.join(app.getPath("documents"), config.title, "languages"))) {
@@ -55,6 +57,8 @@ if (!fs.existsSync(path.join(app.getPath("documents"), config.title)) || !fs.exi
 }
 
 // Init App Database
+const dbVersion = 1; // PRAGMA user_version
+let dbReady = false;
 const knex = require('knex')({
   client: 'sqlite3',
   useNullAsDefault: true,
@@ -65,6 +69,139 @@ const knex = require('knex')({
 knex.raw('PRAGMA foreign_keys = ON').then(() => {
   if (isDev) console.log(`Foreign Key Check Activated`);
 });
+knex.raw('PRAGMA user_version').then((response) => {
+  const _dbVersion = response[0]['user_version'];
+  
+  if(_dbVersion < dbVersion) {
+    // Update DB
+    console.log("DB update is in order!");
+    
+    for(let target = _dbVersion; target < dbVersion; target++) {
+      switch (target) {
+        case 0: {
+          // First Install DB Setup
+          knex.schema.hasTable('groups').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('groups', function (t) {
+                t.increments('id').unsigned();
+        
+                t.timestamp('created_at').defaultTo(knex.fn.now());
+                t.timestamp('updated_at').defaultTo(knex.fn.now());
+              });
+            }
+          });
+          knex.schema.hasTable('group_meta').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('group_meta', function (t) {
+                t.primary(['group_id', 'metaName']);
+                
+                t.integer('group_id').unsigned().notNullable();
+                t.string('metaName', 255).notNullable();
+                
+                t.text('metaValue').notNullable();
+                
+                t.foreign("group_id").references("groups.id").onDelete("CASCADE").onUpdate("CASCADE");
+              });
+            }
+          });
+          
+          knex.schema.hasTable('rules').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('rules', function (t) {
+                t.increments('id').unsigned();
+                t.integer('group_id').unsigned().notNullable();
+        
+                t.timestamp('created_at').defaultTo(knex.fn.now());
+                t.timestamp('updated_at').defaultTo(knex.fn.now());
+        
+                t.foreign("group_id").references("groups.id").onDelete("CASCADE").onUpdate("CASCADE");
+              });
+            }
+          });
+          knex.schema.hasTable('rule_meta').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('rule_meta', function (t) {
+                t.primary(['rule_id', 'metaName']);
+                
+                t.integer('rule_id').unsigned().notNullable();
+                t.string('metaName', 255).notNullable();
+                
+                t.text('metaValue').notNullable();
+                
+                t.foreign("rule_id").references("rules.id").onDelete("CASCADE").onUpdate("CASCADE");
+              });
+            }
+          });
+          
+          knex.schema.hasTable('statistics').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('statistics', function (t) {
+                t.increments('id').unsigned().primary();
+                
+                t.integer('rule_id').unsigned().notNullable();
+                t.integer('group_id').unsigned().notNullable();
+                
+                t.timestamp('started_at').defaultTo(null);
+                t.timestamp('stopped_at').defaultTo(null);
+                
+                t.foreign('rule_id').references("rules.id").onDelete("CASCADE").onUpdate("CASCADE");
+                t.foreign('group_id').references("groups.id").onDelete("CASCADE").onUpdate("CASCADE");
+              });
+            }
+          });
+          knex.schema.hasTable('statistic_meta').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('statistic_meta', function (t) {
+                t.primary(['statistic_id', 'metaName']);
+                
+                t.integer('statistic_id').unsigned().notNullable();
+                t.string('metaName', 255).notNullable();
+                
+                t.text('metaValue').notNullable();
+                
+                t.foreign("statistic_id").references("statistics.id").onDelete("CASCADE").onUpdate("CASCADE");
+              });
+            }
+          });
+          knex.schema.hasTable('statistic_titles').then(function (exists) {
+            if (!exists) {
+              return knex.schema.createTable('statistic_titles', function (t) {
+                t.primary(['statistic_id', 'changed_at']);
+                
+                t.integer('statistic_id').unsigned().notNullable();
+                t.timestamp('changed_at').notNullable();
+                
+                t.text('title').notNullable();
+                
+                t.foreign("statistic_id").references("statistics.id").onDelete("CASCADE").onUpdate("CASCADE");
+              });
+            }
+          });
+          break;
+        }
+        default: {
+          console.error(`Update for target "${target}" is not yet done!`);
+          app.exit(-1);
+          return;
+        }
+      }
+    }
+    
+    knex.raw(`PRAGMA user_version = ${dbVersion}`).then(() => {
+      console.log('DB Updated successfully');
+      dbReady = true;
+    });
+  } else if (_dbVersion > dbVersion) {
+    // Downgrade not possible...
+    console.error("DB downgrade is not possible!");
+    app.exit(-1);
+  } else {
+    console.log("DB version is up to date!");
+    dbReady = true;
+  }
+});
+
+// TODO implement dbReady check!
 
 // Keep some global references of objects.
 let i18n, tray, trayWindow, processList;
@@ -133,7 +270,19 @@ if (!singleLock) {
       }
       if(settings.get('app.recordingProcesses', false)) {
         const timestamp = new Date().getTime();
-        const rules = await knex.select('id', 'group_id', 'rule', 'type').from('rules');
+        
+        let rules = [];
+        try {
+          rules = await knex
+            .select('rules.id', 'rules.group_id')
+            .select(knex.raw('a.`metaValue` AS \'rule\''))
+            .select(knex.raw('b.`metaValue` AS \'type\''))
+            .from('rules')
+            .joinRaw('LEFT JOIN `rule_meta` a ON `rules`.`id` = a.`rule_id` AND a.`metaName` = \'rule\'')
+            .joinRaw('LEFT JOIN `rule_meta` b ON `rules`.`id` = b.`rule_id` AND b.`metaName` = \'type\'');
+        } catch (error) {
+          console.error('Error in processList ON RemovedFromList', error);
+        }
         
         if(rules.length > 0) {
           for(const process of removed) {
@@ -171,7 +320,19 @@ if (!singleLock) {
       }
       if(settings.get('app.recordingProcesses', false)) {
         const timestamp = new Date().getTime();
-        const rules = await knex.select('id', 'group_id', 'rule', 'type').from('rules');
+        
+        let rules = [];
+        try {
+          rules = await knex
+            .select('rules.id', 'rules.group_id')
+            .select(knex.raw('a.`metaValue` AS \'rule\''))
+            .select(knex.raw('b.`metaValue` AS \'type\''))
+            .from('rules')
+            .joinRaw('LEFT JOIN `rule_meta` a ON `rules`.`id` = a.`rule_id` AND a.`metaName` = \'rule\'')
+            .joinRaw('LEFT JOIN `rule_meta` b ON `rules`.`id` = b.`rule_id` AND b.`metaName` = \'type\'');
+        } catch (error) {
+          console.error('Error in processList ON TitleChanged', error);
+        }
         
         if(rules.length > 0) {
           for(const process of newTitles) {
@@ -179,37 +340,54 @@ if (!singleLock) {
             for(const rule of rules) {
               switch(rule.type) {
                 case 'exec': {
+                  
                   const db = await knex
-                    .select('id', 'processMeta', 'started_at')
-                    .whereRaw('json_extract(statistics.processMeta, \'$.PID\') = ?', process.Id)
-                    .andWhereRaw('json_extract(statistics.processMeta, \'$.OS.StartTime\') = ?', process.StartTime)
-                    .andWhereRaw('json_extract(statistics.processMeta, \'$.Rule.Type\') = ?', rule.type)
-                    .andWhereRaw('json_extract(statistics.processMeta, \'$.Rule.Rule\') = ?', rule.rule)
-                    .andWhere('stopped_at', null)
-                    .from('statistics');
-  
+                    .select('statistics.id', 'statistics.started_at')
+                    .select(knex.raw('a.`metaValue` AS \'PID\''))
+                    .select(knex.raw('json_group_object(statistic_titles.changed_at, statistic_titles.title) as titles'))
+                    .whereRaw('a.`metaValue` = ?', process.Id)
+                    .andWhereRaw('b.`metaValue` = ?', process.StartTime)
+                    .andWhereRaw('c.`metaValue` = ?', rule.type)
+                    .andWhereRaw('d.`metaValue` = ?', rule.rule)
+                    .andWhere('statistics.stopped_at', null)
+                    .from('statistics')
+                    .groupBy('statistics.id')
+                    .joinRaw('LEFT JOIN `statistic_meta` a ON `statistics`.`id` = a.`statistic_id` AND a.`metaName` = \'PID\'')
+                    .joinRaw('LEFT JOIN `statistic_meta` b ON `statistics`.`id` = b.`statistic_id` AND b.`metaName` = \'OSStartTime\'')
+                    .joinRaw('LEFT JOIN `statistic_meta` c ON `statistics`.`id` = c.`statistic_id` AND c.`metaName` = \'ruleType\'')
+                    .joinRaw('LEFT JOIN `statistic_meta` d ON `statistics`.`id` = d.`statistic_id` AND d.`metaName` = \'ruleRule\'')
+                    .leftJoin('statistic_titles', 'statistics.id', 'statistic_titles.statistic_id');
+                  
                   if(db.length > 0) {
                     if (process.Executable === rule.rule) {
-                      await processDataUpdate(timestamp, db, process);
+                      await recordTitleChange(timestamp, db, process);
                     }
                   }
                   break;
                 }
                 case 'rule': {
                   let regexp = new RegExp(rule.rule);
-                  
+  
                   const db = await knex
-                    .select('id', 'processMeta', 'started_at')
-                    .whereRaw('json_extract(statistics.processMeta, \'$.PID\') = ?', process.Id)
-                    .andWhereRaw('json_extract(statistics.processMeta, \'$.OS.StartTime\') = ?', process.StartTime)
-                    .andWhereRaw('json_extract(statistics.processMeta, \'$.Rule.Type\') = ?', rule.type)
-                    .andWhereRaw('json_extract(statistics.processMeta, \'$.Rule.Rule\') = ?', rule.rule)
-                    .andWhere('stopped_at', null)
-                    .from('statistics');
+                    .select('statistics.id', 'statistics.started_at')
+                    .select(knex.raw('a.`metaValue` AS \'PID\''))
+                    .select(knex.raw('json_group_object(statistic_titles.changed_at, statistic_titles.title) as titles'))
+                    .whereRaw('a.`metaValue` = ?', process.Id)
+                    .andWhereRaw('b.`metaValue` = ?', process.StartTime)
+                    .andWhereRaw('c.`metaValue` = ?', rule.type)
+                    .andWhereRaw('d.`metaValue` = ?', rule.rule)
+                    .andWhere('statistics.stopped_at', null)
+                    .from('statistics')
+                    .groupBy('statistics.id')
+                    .joinRaw('LEFT JOIN `statistic_meta` a ON `statistics`.`id` = a.`statistic_id` AND a.`metaName` = \'PID\'')
+                    .joinRaw('LEFT JOIN `statistic_meta` b ON `statistics`.`id` = b.`statistic_id` AND b.`metaName` = \'OSStartTime\'')
+                    .joinRaw('LEFT JOIN `statistic_meta` c ON `statistics`.`id` = c.`statistic_id` AND c.`metaName` = \'ruleType\'')
+                    .joinRaw('LEFT JOIN `statistic_meta` d ON `statistics`.`id` = d.`statistic_id` AND d.`metaName` = \'ruleRule\'')
+                    .leftJoin('statistic_titles', 'statistics.id', 'statistic_titles.statistic_id');
                   
                   if(db.length > 0) {
                     if (regexp.test(process.WindowTitle)) {
-                      await processDataUpdate(timestamp, db, process);
+                      await recordTitleChange(timestamp, db, process);
                     } else {
                       if (regexp.test(prevProcess.WindowTitle)) {
                         await markAsStoppedDB(timestamp, rule, prevProcess);
@@ -642,8 +820,27 @@ ipcMain.handle('generalInvoke', async function (event, data) {
     case "getDataOfType": {
       let response;
       
+      let baseSelect = [`${data.payload.type}.id`];
+      
+      if(data.payload.type.toLowerCase() === 'rules') {
+        baseSelect.push(`${data.payload.type}.group_id`);
+      }
+      
+      let metaTablePrefix = data.payload.type.toLowerCase().slice(0, -1);
+      let metaTable = `${metaTablePrefix}_meta`;
+      let metaSelect = [];
+      let metaJoin = [];
+      for(const metaKey of data.payload.cols) {
+        metaSelect.push(`${metaKey}.\`metaValue\` AS '${metaKey}'`);
+        metaJoin.push(`LEFT JOIN \`${metaTable}\` ${metaKey} ON \`${data.payload.type.toLowerCase()}\`.\`id\` = ${metaKey}.\`${data.payload.type.toLowerCase().slice(0, -1)}_id\` AND ${metaKey}.\`metaName\` = '${metaKey}'`);
+      }
+      
       try {
-        response = await knex.select(data.payload.cols).from(data.payload.type);
+        response = await knex
+          .select(baseSelect)
+          .select(knex.raw(metaSelect.join(", ")))
+          .from(data.payload.type)
+          .joinRaw(metaJoin.join(" "));
       } catch (error) {
         response = error;
       }
@@ -667,7 +864,9 @@ ipcMain.handle('generalInvoke', async function (event, data) {
       let response;
       
       try {
-        response = await knex(data.payload.type).where('id', data.payload.itemID).del()
+        response = await knex(data.payload.type)
+          .where('id', data.payload.itemID)
+          .del();
       } catch (error) {
         response = error;
       }
@@ -691,17 +890,55 @@ ipcMain.handle('generalInvoke', async function (event, data) {
       let response;
       
       try {
+        let metaTablePrefix = data.payload.type.toLowerCase().slice(0, -1);
+        let metaTable = `${metaTablePrefix}_meta`;
+        let baseData = {};
+        
         if (Object.keys(data.payload.data).includes("id")) {
           // update
           let id = data.payload.data.id;
           delete data.payload.data.id;
-          data.payload.data['updated_at'] = knex.fn.now();
-          response = await knex(data.payload.type).where('id', '=', id).update(data.payload.data);
-          delete data.payload.data.updated_at;
+  
+          baseData['updated_at'] = knex.fn.now();
+          if(metaTablePrefix === 'rule') {
+            baseData['group_id'] = data.payload.data['group_id'];
+            delete data.payload.data['group_id'];
+          }
+          
+          response = await knex(data.payload.type.toLowerCase())
+            .where('id', '=', id)
+            .update(baseData);
+          
+          for(const metaKey in data.payload.data) {
+            await knex(metaTable)
+              .where(`${metaTablePrefix}_id`, '=', id)
+              .where('metaName', '=', metaKey)
+              .update({metaValue: data.payload.data[metaKey]});
+          }
+          
           data.payload.data.id = id;
         } else {
           // insert
-          response = await knex.insert(data.payload.data).into(data.payload.type);
+          if(metaTablePrefix === 'rule') {
+            baseData['group_id'] = data.payload.data['group_id'];
+            delete data.payload.data['group_id'];
+          }
+          
+          response = await knex
+            .insert(baseData)
+            .into(data.payload.type.toLowerCase());
+          
+          let id = response[0];
+          
+          for(const metaKey in data.payload.data) {
+            await knex
+              .insert({
+                [`${metaTablePrefix}_id`]: id,
+                metaName: metaKey,
+                metaValue: data.payload.data[metaKey]
+              })
+              .into(metaTable);
+          }
         }
       } catch (error) {
         response = error;
@@ -767,7 +1004,10 @@ ipcMain.handle('generalInvoke', async function (event, data) {
       
       try {
         let GroupID = data.payload;
-        response = await knex("statistics").where('group_id', '=', GroupID).del();
+        
+        response = await knex("statistics")
+          .where('group_id', '=', GroupID)
+          .del();
       } catch (error) {
         response = error;
       }
@@ -805,34 +1045,55 @@ ipcMain.handle('generalInvoke', async function (event, data) {
 async function addToDB(timestamp, rule, process) {
   const meta = {
     PID: process.Id,
-    Title: process.WindowTitle,
-    OS: {
-      StartTime: process.StartTime
-    },
-    Rule: {
-      Type: rule.type,
-      Rule: rule.rule
-    }
+    OSStartTime: process.StartTime,
+    ruleType: rule.type,
+    ruleRule: rule.rule
   }
   
   try {
-    await knex.insert({ rule_id: rule.id, group_id: rule.group_id, processMeta: JSON.stringify(meta), started_at: timestamp }).into('statistics');
+    let id = await knex
+      .insert({
+        rule_id: rule.id,
+        group_id: rule.group_id,
+        started_at: timestamp
+      })
+      .into('statistics');
+    
+    id = id[0];
+    
+    for (const metaKey in meta) {
+      await knex
+        .insert({
+          statistic_id: id,
+          metaName: metaKey,
+          metaValue: meta[metaKey]
+        })
+        .into('statistic_meta');
+    }
+    
+    await knex
+      .insert({
+        statistic_id: id,
+        changed_at: timestamp,
+        title: process.WindowTitle
+      })
+      .into('statistic_titles')
     
     if (isDev) {
       console.log("Added to DB");
     }
   } catch (error) {
-    console.error(error);
+    console.error('error IN addToDB', error);
   }
 }
 
 async function markAsStoppedDB(timestamp, rule, process) {
   try {
     const db = await knex('statistics')
-      .whereRaw('json_extract(statistics.processMeta, \'$.PID\') = ?', process.Id)
-      .andWhereRaw('json_extract(statistics.processMeta, \'$.OS.StartTime\') = ?', process.StartTime)
-      .andWhereRaw('json_extract(statistics.processMeta, \'$.Rule.Type\') = ?', rule.type)
-      .andWhere('stopped_at', null)
+      .whereRaw('`statistics`.`id` IN (SELECT a.`statistic_id` FROM `statistic_meta` a WHERE `statistics`.`id` = a.`statistic_id` AND a.`metaName` = \'PID\' AND a.`metaValue` = ?)', process.Id)
+      .andWhereRaw('`statistics`.`id` IN (SELECT b.`statistic_id` FROM `statistic_meta` b WHERE `statistics`.`id` = b.`statistic_id` AND b.`metaName` = \'OSStartTime\' AND b.`metaValue` = ?)', process.StartTime)
+      .andWhereRaw('`statistics`.`id` IN (SELECT c.`statistic_id` FROM `statistic_meta` c WHERE `statistics`.`id` = c.`statistic_id` AND c.`metaName` = \'ruleType\' AND c.`metaValue` = ?)', rule.type)
+      .andWhere('statistics.stopped_at', null)
       .update({ stopped_at: timestamp });
     
     if (isDev) {
@@ -843,43 +1104,34 @@ async function markAsStoppedDB(timestamp, rule, process) {
       }
     }
   } catch (error) {
-    console.error(error);
+    console.error('error IN markAsStoppedDB', error);
   }
 }
 
-async function processDataUpdate(timestamp, processFromDB, processCurrentlyRunning) {
-  let _db = processFromDB.filter((x) => JSON.parse(x.processMeta).PID === processCurrentlyRunning.Id)[0];
-  let _oldMeta = JSON.parse(_db.processMeta);
+async function recordTitleChange(timestamp, processFromDB, processCurrentlyRunning) {
+  let _db = processFromDB.filter((x) => x.PID === processCurrentlyRunning.Id)[0];
   
-  // Convert Meta Title to OBJECT
-  if(typeof _oldMeta.Title === "string") {
-    let _oldTitle = _oldMeta.Title;
-    _oldMeta.Title = {};
-    _oldMeta.Title[_db.started_at] = _oldTitle;
-  }
+  if(Object.keys(_db).length === 0) console.error("titlePreRecordError");
   
-  // Record title change
-  _oldMeta.Title[timestamp] = processCurrentlyRunning.WindowTitle;
-  
-  // Save Changes
-  await updateStatisticsFieldDB(_db.id, 'processMeta', JSON.stringify(_oldMeta));
-}
-
-async function updateStatisticsFieldDB(rowID, colID, newData) {
   try {
-    const db = await knex('statistics')
-      .where('id', rowID)
-      .update({ [colID]: newData });
+    // Record Title Change
+    const db = await knex
+      .insert({
+        statistic_id: _db.id,
+        changed_at: timestamp,
+        title: processCurrentlyRunning.WindowTitle
+      })
+      .into('statistic_titles');
     
     if (isDev) {
       if (db) {
-        console.log(`Statistics Row (${rowID}) Field (${colID}) Updated`);
+        console.log(`Recorded A Title Change For ID (${_db.id}) AT (${timestamp})`);
       } else {
         console.log(`Nothing to update`);
       }
     }
   } catch (error) {
-    console.error(error);
+    console.error('error IN recordTitleChange', error);
   }
 }
 
@@ -888,7 +1140,19 @@ async function startRecording(added) {
     if(added === undefined) added = processList.getProcessList();
     
     const timestamp = new Date().getTime();
-    const rules = await knex.select('id', 'group_id', 'rule', 'type').from('rules');
+    
+    let rules = [];
+    try {
+      rules = await knex
+        .select('rules.id', 'rules.group_id')
+        .select(knex.raw('a.`metaValue` AS \'rule\''))
+        .select(knex.raw('b.`metaValue` AS \'type\''))
+        .from('rules')
+        .joinRaw('LEFT JOIN `rule_meta` a ON `rules`.`id` = a.`rule_id` AND a.`metaName` = \'rule\'')
+        .joinRaw('LEFT JOIN `rule_meta` b ON `rules`.`id` = b.`rule_id` AND b.`metaName` = \'type\'');
+    } catch (error) {
+      console.error('Error in startRecording', error);
+    }
     
     if(rules.length > 0) {
       for(const process of added) {
@@ -957,67 +1221,9 @@ function toggleTray() {
 }
 
 function showTray() {
-  const position = getTrayPosition();
-  trayWindow.setPosition(position.x, position.y, false);
+  positioner.position(trayWindow, tray.getBounds());
   trayWindow.show();
   trayWindow.focus();
-}
-
-function getTrayPosition() {
-  // TODO linux & darwin
-  const windowBounds = trayWindow.getBounds();
-  const trayBounds = (process.platform === 'linux' ? screen.getCursorScreenPoint() : tray.getBounds());
-  if (process.platform === 'linux') {
-    trayBounds.height = 0;
-    trayBounds.width = 0;
-  }
-  let output = { x: 0, y: 0 };
-  
-  if ((screen.getPrimaryDisplay().size.height / 2) > trayBounds.y) {
-    if ((screen.getPrimaryDisplay().size.width / 2) > trayBounds.x) {
-      // Q4
-      // TOP LEFT
-    } else {
-      // Q1
-      // TOP RIGHT
-      output.x = Math.round(trayBounds.x + (trayBounds.width / 2) - (windowBounds.width / 2));
-      output.y = Math.round(trayBounds.y + trayBounds.height);
-      
-      if ((output.x + windowBounds.width) > screen.getPrimaryDisplay().workAreaSize.width)
-        output.x -= (output.x + windowBounds.width) - screen.getPrimaryDisplay().workAreaSize.width;
-    }
-  } else {
-    if ((screen.getPrimaryDisplay().size.width / 2) > trayBounds.x) {
-      // Q3
-      // BOTTOM LEFT
-      output.x = Math.round(screen.getPrimaryDisplay().size.width - screen.getPrimaryDisplay().workAreaSize.width);
-      output.y = Math.round(trayBounds.y + (trayBounds.height / 2) - (windowBounds.height / 2));
-      
-      if ((output.y + windowBounds.height) > screen.getPrimaryDisplay().workAreaSize.height)
-        output.y -= (output.y + windowBounds.height) - screen.getPrimaryDisplay().workAreaSize.height;
-    } else {
-      // Q2
-      // BOTTOM RIGHT
-      if (screen.getPrimaryDisplay().size.width === screen.getPrimaryDisplay().workAreaSize.width) {
-        // Horizontal Taskbar
-        output.x = Math.round(trayBounds.x + (trayBounds.width / 2) - (windowBounds.width / 2) - 0);
-        output.y = Math.round(trayBounds.y - windowBounds.height);
-        
-        if ((output.x + windowBounds.width) > screen.getPrimaryDisplay().workAreaSize.width)
-          output.x -= (output.x + windowBounds.width) - screen.getPrimaryDisplay().workAreaSize.width;
-        
-      } else {
-        // Vertical Taskbar
-        output.x = Math.round(screen.getPrimaryDisplay().workAreaSize.width - windowBounds.width);
-        output.y = Math.round(trayBounds.y + (trayBounds.height / 2) - (windowBounds.height / 2));
-        
-        if ((output.y + windowBounds.height) > screen.getPrimaryDisplay().workAreaSize.height)
-          output.y -= (output.y + windowBounds.height) - screen.getPrimaryDisplay().workAreaSize.height;
-      }
-    }
-  }
-  
-  return output;
 }
 /* </editor-fold> */
 /* <editor-fold desc="* Utility Functions *"> */
@@ -1075,88 +1281,6 @@ function initSettings() {
     } else {
       startRecording().then(async () => {
         await sendStatisticsUpdate();
-      });
-    }
-  });
-  
-  knex.schema.hasTable('groups').then(function (exists) {
-    if (!exists) {
-      return knex.schema.createTable('groups', function (t) {
-        t.bigIncrements('id').unsigned().primary();
-        t.string('name', 255).unique().notNullable();
-        
-        // Discord Rich Presence
-        t.string('discordIcon').defaultTo(null);
-        t.string('discordNiceName').defaultTo(null);
-        t.boolean('discordShowPresence').defaultTo(false);
-        
-        t.timestamp('created_at').defaultTo(knex.fn.now());
-        t.timestamp('updated_at').defaultTo(knex.fn.now());
-      });
-    } else {
-      knex.schema.hasColumn('groups', 'viewOffset').then(function (col) {
-        if(col) {
-          return knex.schema.table('groups', function (table) {
-            table.dropColumn('viewOffset');
-          });
-        }
-      });
-      knex.schema.hasColumn('groups', 'discordIcon').then(function (col) {
-        if(!col) {
-          return knex.schema.table('groups', function (table) {
-            table.string('discordIcon').defaultTo(null);
-          });
-        }
-      });
-    }
-  });
-  knex.schema.hasTable('rules').then(function (exists) {
-    if (!exists) {
-      return knex.schema.createTable('rules', function (t) {
-        t.bigIncrements('id').unsigned().primary();
-        t.bigInteger('group_id').unsigned().notNullable();
-        t.text("rule").notNullable();
-        t.string("type", 4).notNullable();
-        
-        // Discord Rich Presence
-        t.string('discordNiceName').defaultTo(null);
-        t.boolean('discordShowPresence').defaultTo(false);
-        
-        t.timestamp('created_at').defaultTo(knex.fn.now());
-        t.timestamp('updated_at').defaultTo(knex.fn.now());
-        
-        t.unique(['group_id', 'rule', 'type'], {indexName: 'group_rule_type'});
-        t.foreign("group_id").references("groups.id").onDelete("CASCADE");
-      });
-    } else {
-      knex.schema.hasColumn('rules', 'discordNiceName').then(function (col) {
-        if(!col) {
-          return knex.schema.table('rules', function (table) {
-            table.string('discordNiceName').defaultTo(null);
-          });
-        }
-      });
-      knex.schema.hasColumn('rules', 'discordShowPresence').then(function (col) {
-        if(!col) {
-          return knex.schema.table('rules', function (table) {
-            table.boolean('discordShowPresence').defaultTo(false);
-          });
-        }
-      });
-    }
-  });
-  knex.schema.hasTable('statistics').then(function (exists) {
-    if (!exists) {
-      return knex.schema.createTable('statistics', function (t) {
-        t.bigIncrements('id').unsigned().primary();
-        t.bigInteger('rule_id').unsigned().notNullable();
-        t.bigInteger('group_id').unsigned().notNullable();
-        t.json('processMeta');
-        t.bigInteger('started_at').unsigned().notNullable();
-        t.bigInteger('stopped_at');
-        
-        t.foreign('rule_id').references("rules.id").onDelete("CASCADE");
-        t.foreign('group_id').references("groups.id").onDelete("CASCADE");
       });
     }
   });
@@ -1251,9 +1375,11 @@ async function sendStatisticsUpdate() {
 
 async function getStatistics() {
   const groups = await knex
-    .select('id', 'name')
+    .select('groups.id')
+    .select(knex.raw('a.`metaValue` AS \'name\''))
     .orderBy([{ column: 'id', order: 'asc' }])
-    .from('groups');
+    .from('groups')
+    .joinRaw('LEFT JOIN `group_meta` a ON `groups`.`id` = a.`group_id` AND a.`metaName` = \'name\'');
   
   for(const groupIndex in groups) {
     const group = groups[groupIndex];
@@ -1264,7 +1390,7 @@ async function getStatistics() {
       for(const column in groupFilters) {
         switch (column) {
           case "query": {
-            filterQuery += `${filterQuery.length ? ' AND ' : ''}statistics.processMeta LIKE '%${groupFilters[column]}%'`;
+            filterQuery += `${filterQuery.length ? ' AND ' : ''}statistic_titles.title LIKE '%${groupFilters[column]}%'`;
             break;
           }
           case "from": {
@@ -1281,12 +1407,19 @@ async function getStatistics() {
     
     groups[groupIndex]['filtered'] = !!filterQuery;
     groups[groupIndex]['items'] = await knex
-      .select('statistics.id as id', 'statistics.processMeta as processMeta', 'statistics.started_at as startedAt', 'statistics.stopped_at as stoppedAt')
-      .select('rules.id as rule_id', 'rules.group_id as rule_group_id', 'rules.rule as rule_rule', 'rules.type as rule_type')
-      .leftJoin('rules', 'statistics.rule_id', 'rules.id')
+      .select('statistics.id as id', 'statistics.started_at as startedAt', 'statistics.stopped_at as stoppedAt')
+      .select(knex.raw('json_group_object(statistic_titles.changed_at, statistic_titles.title) as titles'))
+      .select('rules.id as rule_id', 'rules.group_id as rule_group_id')
+      .select(knex.raw('rr.`metaValue` AS \'rule_rule\''))
+      .select(knex.raw('rt.`metaValue` AS \'rule_type\''))
+      .join('rules', 'statistics.rule_id', 'rules.id')
+      .leftJoin('statistic_titles', 'statistics.id', 'statistic_titles.statistic_id')
+      .joinRaw('LEFT JOIN `rule_meta` rr ON `rules`.`id` = rr.`rule_id` AND rr.`metaName` = \'rule\'')
+      .joinRaw('LEFT JOIN `rule_meta` rt ON `rules`.`id` = rt.`rule_id` AND rt.`metaName` = \'type\'')
       .where('statistics.group_id', "=", group.id)
       .whereRaw(filterQuery)
       .orderBy([{ column: 'statistics.started_at', order: 'asc' }])
+      .groupBy('statistics.id')
       .from('statistics');
   }
   
@@ -1295,18 +1428,23 @@ async function getStatistics() {
 
 async function getLatestTrackedAppForDiscord() {
   return knex
-    .select('groups.discordIcon as discordIcon', 'groups.discordNiceName as discordDetails', 'groups.discordShowPresence as showDetails')
-    .select('rules.discordNiceName as discordState', 'rules.discordShowPresence as showState')
+    .select(knex.raw('c.`metaValue` as `discordIcon`'))
+    .select(knex.raw('d.`metaValue` as `discordDetails`'))
+    .select(knex.raw('e.`metaValue` as `showDetails`'))
+    .select(knex.raw('a.`metaValue` AS `discordState`'))
+    .select(knex.raw('b.`metaValue` as `showState`'))
     .select('statistics.started_at as startedAt')
-    .leftJoin('rules', 'statistics.rule_id', 'rules.id')
-    .leftJoin('groups', function () {
-      this.on('groups.id', '=', 'statistics.group_id').andOn('groups.id', '=', 'rules.group_id');
-    })
+    .from('statistics')
+    .joinRaw('LEFT JOIN `rule_meta` a ON `statistics`.`rule_id` = a.`rule_id` AND a.`metaName` = \'discordNiceName\'')
+    .joinRaw('LEFT JOIN `rule_meta` b ON `statistics`.`rule_id` = b.`rule_id` AND b.`metaName` = \'discordShowPresence\'')
+    .joinRaw('LEFT JOIN `group_meta` c ON `statistics`.`group_id` = c.`group_id` AND c.`metaName` = \'discordIcon\'')
+    .joinRaw('LEFT JOIN `group_meta` d ON `statistics`.`group_id` = d.`group_id` AND d.`metaName` = \'discordNiceName\'')
+    .joinRaw('LEFT JOIN `group_meta` e ON `statistics`.`group_id` = e.`group_id` AND e.`metaName` = \'discordShowPresence\'')
     .whereNull('statistics.stopped_at')
-    .where('groups.discordShowPresence', true)
+    .whereRaw('e.`metaValue` = 1')
+    .groupBy('statistics.id')
     .orderBy([{ column: 'statistics.started_at', order: 'desc' }])
-    .limit(1)
-    .from('statistics');
+    .limit(1);
 }
 /* </editor-fold> */
 /* <editor-fold desc="* Extensions *"> */
