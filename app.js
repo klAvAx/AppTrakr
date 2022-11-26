@@ -729,6 +729,8 @@ ipcMain.handle('generalInvoke', async function (event, data) {
     case "toggleAppSetting": {
       switch (data.payload) {
         case "appAutoStart":
+          if(os.platform() !== "win32" && os.platform() !== "darwin") return { setting: data.payload, value: null };
+          
           app.setLoginItemSettings({ openAtLogin: !app.getLoginItemSettings().openAtLogin });
           return {
             setting: data.payload,
@@ -772,7 +774,9 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             value: settings.get('app.allowInternetConnectivity', false)
           }
         case "appDiscordEnabled":
-          settings.set("app.discord.enabled", !settings.get('app.discord.enabled', false));
+          if(DiscordAID !== "...Discord Application ID...") {
+            settings.set("app.discord.enabled", !settings.get('app.discord.enabled', false));
+          }
           return {
             setting: data.payload,
             value: settings.get('app.discord.enabled', false)
@@ -795,9 +799,10 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             appVersion: config.version,
             appIsPinned: appIsPinned,
             appLang: settings.get('app.lang', 'sys'),
-            appAutoStart: app.getLoginItemSettings().openAtLogin,
+            appAutoStart: (os.platform() === "win32" || os.platform() === "darwin" ? app.getLoginItemSettings().openAtLogin : null),
             appTheme: settings.get('app.theme', 'sys'),
             appAllowInternetConnectivity: settings.get('app.allowInternetConnectivity', false),
+            appDiscordPossible: DiscordAID !== "...Discord Application ID...",
             appDiscordEnabled: settings.get('app.discord.enabled', false),
             appProcessListInitial: settings.get('app.processListInitial', 5),
             appProcessListRecurring: settings.get('app.processListRecurring', 1),
@@ -1240,9 +1245,14 @@ function shellOpen(url) {
 }
 
 function autoStart(isEnabled) {
-  app.setLoginItemSettings({
-    openAtLogin: isEnabled
-  });
+  let platform = os.platform();
+  
+  // Windows & MacOS
+  if(platform === "win32" || platform === "darwin") {
+    app.setLoginItemSettings({
+      openAtLogin: isEnabled
+    });
+  }
 }
 
 function initSettings() {
@@ -1303,7 +1313,7 @@ function initSettings() {
 }
 function initDiscord() {
   settingsDiscordEnabled = settings.onDidChange('app.discord.enabled', function (newValue) {
-    if(newValue) {
+    if(newValue && DiscordAID !== "...Discord Application ID...") {
       // setup periodical activity update
       DiscordRPC.register(DiscordAID);
       discordClient = new DiscordRPC.Client({ transport: 'ipc' });
@@ -1316,7 +1326,7 @@ function initDiscord() {
       deInitDiscord();
     }
   });
-  if(settings.get('app.discord.enabled', false)) {
+  if(settings.get('app.discord.enabled', false) && DiscordAID !== "...Discord Application ID...") {
     DiscordRPC.register(DiscordAID);
     discordClient = new DiscordRPC.Client({ transport: 'ipc' });
     discordClient.on('ready', () => {

@@ -1,7 +1,7 @@
 {
   "name": "apptrakr",
   "title": "App Trakr",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Service based launched application tracker",
   "private": true,
   "main": "app.js",
@@ -36,8 +36,24 @@
       "target": [
         "AppImage"
       ],
+      "artifactName": "${productName}-${version}.${ext}",
+      "desktop": {
+        "Categories": "Utility",
+        "Name": "App Trakr",
+        "Terminal": "false",
+        "Type": "Application",
+        "StartupWMClass": "apptrakr",
+        "StartupNotify": "false",
+        "X-GNOME-Autostart-enabled": "true",
+        "X-GNOME-Autostart-Delay": "10",
+        "X-MATE-Autostart-Delay": "10",
+        "X-KDE-autostart-after": "panel"
+      },
       "icon": "assets/icons/linux/256x256.png",
-      "category": "Utility"
+      "category": "Utility",
+      "asarUnpack": [
+        "assets/icons/linux/256x256.png"
+      ]
     },
     "nsis": {
       "deleteAppDataOnUninstall": true
