@@ -6,6 +6,8 @@ const fs = require("fs");
 const url = require("url");
 const util = require("util");
 const path = require("path");
+const zlib = require("zlib");
+const stream = require("stream");
 const config = require(path.join(__dirname, "package.json"));
 
 const positioner = require("electron-traywindow-positioner");
@@ -19,8 +21,12 @@ const DiscordAID = "...Discord Application ID...";
 const DiscordSEC = "...Discord Application Secret...";
 
 // Setup App Directory
-if (!fs.existsSync(path.join(app.getPath("documents"), config.title)) || !fs.existsSync(path.join(app.getPath("documents"), config.title, "languages"))) {
-  if(!fs.existsSync(path.join(app.getPath("documents"), config.title))) {
+if (
+  !fs.existsSync(path.join(app.getPath("documents"), config.title)) ||
+  !fs.existsSync(path.join(app.getPath("documents"), config.title, "languages")) ||
+  !fs.existsSync(path.join(app.getPath("documents"), config.title, "logs")))
+{
+  if (!fs.existsSync(path.join(app.getPath("documents"), config.title))) {
     fs.mkdirSync(path.join(app.getPath("documents"), config.title));
   }
   
@@ -38,7 +44,15 @@ if (!fs.existsSync(path.join(app.getPath("documents"), config.title)) || !fs.exi
       }
     }
   }
+  
+  if (!fs.existsSync(path.join(app.getPath("documents"), config.title, "logs"))) {
+    fs.mkdirSync(path.join(app.getPath("documents"), config.title, "logs"));
+    
+    log("App Is Starting");
+  }
 } else {
+  log("App Is Starting");
+  
   // Update Lang files if they are newer
   let files = fs.readdirSync(path.join(__dirname, 'ElectronLibs', 'translations'));
   for(const file of files) {
@@ -54,7 +68,45 @@ if (!fs.existsSync(path.join(app.getPath("documents"), config.title)) || !fs.exi
       }
     }
   }
+  
+  // Compress Log files
+  // TODO add functionality to keep only last x days, CONFIGURABLE
+  fs.opendir(path.join(app.getPath("documents"), config.title, "logs"), (dErr, dir) => {
+    if(dErr) {
+      console.error(dErr);
+      return;
+    }
+    let date = (new Date()).toISOString().split("T")[0].replaceAll("-", "");
+    
+    let files = fs
+      .readdirSync(dir.path)
+      .filter((file) => !(/\.log\.gz/.test(file)));
+    
+    for(const file of files) {
+      if(file !== `${date}.log`) {
+        const gzip = zlib.createGzip();
+        const source = fs.createReadStream(path.join(dir.path, file));
+        const destination = fs.createWriteStream(path.join(dir.path, `${file}.gz`));
+        
+        stream.pipeline(source, gzip, destination, (err) => {
+          if(err) {
+            console.error(err);
+            fs.rmSync(path.join(dir.path, `${file}.gz`));
+            return;
+          }
+          fs.rmSync(path.join(dir.path, file));
+        });
+      }
+    }
+  });
 }
+
+process.on("uncaughtException", (error, origin) => {
+  logError("Process Uncaught Exception!", error, origin);
+});
+app.on("render-process-gone", (event, webContents, details) => {
+  logError("App Render Process Gone!", event, details);
+});
 
 // Init App Database
 const dbVersion = 1; // PRAGMA user_version
@@ -74,7 +126,7 @@ knex.raw('PRAGMA user_version').then((response) => {
   
   if(_dbVersion < dbVersion) {
     // Update DB
-    console.log("DB update is in order!");
+    log("DB update is in order!");
     
     for(let target = _dbVersion; target < dbVersion; target++) {
       switch (target) {
@@ -188,20 +240,20 @@ knex.raw('PRAGMA user_version').then((response) => {
     }
     
     knex.raw(`PRAGMA user_version = ${dbVersion}`).then(() => {
-      console.log('DB Updated successfully');
+      log('DB Updated successfully');
       dbReady = true;
     });
   } else if (_dbVersion > dbVersion) {
     // Downgrade not possible...
-    console.error("DB downgrade is not possible!");
+    logError("DB downgrade is not possible!");
     app.exit(-1);
   } else {
-    console.log("DB version is up to date!");
+    log("DB version is up to date!");
     dbReady = true;
   }
 });
 
-// TODO implement dbReady check!
+// TODO implement dbReady check?
 
 // Keep some global references of objects.
 let i18n, tray, trayWindow, processList;
@@ -281,7 +333,7 @@ if (!singleLock) {
             .joinRaw('LEFT JOIN `rule_meta` a ON `rules`.`id` = a.`rule_id` AND a.`metaName` = \'rule\'')
             .joinRaw('LEFT JOIN `rule_meta` b ON `rules`.`id` = b.`rule_id` AND b.`metaName` = \'type\'');
         } catch (error) {
-          console.error('Error in processList ON RemovedFromList', error);
+          logError('Error in processList ON RemovedFromList', error);
         }
         
         if(rules.length > 0) {
@@ -331,7 +383,7 @@ if (!singleLock) {
             .joinRaw('LEFT JOIN `rule_meta` a ON `rules`.`id` = a.`rule_id` AND a.`metaName` = \'rule\'')
             .joinRaw('LEFT JOIN `rule_meta` b ON `rules`.`id` = b.`rule_id` AND b.`metaName` = \'type\'');
         } catch (error) {
-          console.error('Error in processList ON TitleChanged', error);
+          logError('Error in processList ON TitleChanged', error);
         }
         
         if(rules.length > 0) {
@@ -432,6 +484,9 @@ app.on('activate', function () {
   }
 });
 
+process.on("SIGUSR2", function () {
+  ForceQuit();
+});
 app.on('before-quit', async function (event) {
   if (app.isQuiting) {
     event.preventDefault();
@@ -440,6 +495,8 @@ app.on('before-quit', async function (event) {
     if (settings.get('app.recordingProcesses', false)) {
       await stopRecording();
     }
+  
+    await logSync("App Is Quitting");
     
     app.exit();
   }
@@ -602,6 +659,10 @@ ipcMain.on('trayWindow', function (event, data) {
     }
     case "zoomReset": {
       trayWindow.webContents.setZoomLevel(0);
+      break;
+    }
+    case "error": {
+      logError('Error in trayWindow', data.payload);
       break;
     }
     default: {
@@ -848,6 +909,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           .joinRaw(metaJoin.join(" "));
       } catch (error) {
         response = error;
+        logError('Error in generalInvoke ON getDataOfType', error);
       }
       
       if (typeof response?.code === "string") {
@@ -874,6 +936,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           .del();
       } catch (error) {
         response = error;
+        logError('Error in generalInvoke ON deleteData', error);
       }
       
       if (typeof response?.code === "string") {
@@ -947,6 +1010,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
         }
       } catch (error) {
         response = error;
+        logError('Error in generalInvoke ON setData', error);
       }
       
       if (typeof response?.code === "string") {
@@ -1015,6 +1079,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           .del();
       } catch (error) {
         response = error;
+        logError('Error in generalInvoke ON deleteGroupData', error);
       }
       
       if (typeof response?.code === "string") {
@@ -1088,7 +1153,7 @@ async function addToDB(timestamp, rule, process) {
       console.log("Added to DB");
     }
   } catch (error) {
-    console.error('error IN addToDB', error);
+    logError('Error in addToDB', error);
   }
 }
 
@@ -1109,7 +1174,7 @@ async function markAsStoppedDB(timestamp, rule, process) {
       }
     }
   } catch (error) {
-    console.error('error IN markAsStoppedDB', error);
+    logError('Error in markAsStoppedDB', error);
   }
 }
 
@@ -1136,7 +1201,7 @@ async function recordTitleChange(timestamp, processFromDB, processCurrentlyRunni
       }
     }
   } catch (error) {
-    console.error('error IN recordTitleChange', error);
+    logError('Error in recordTitleChange', error);
   }
 }
 
@@ -1156,7 +1221,7 @@ async function startRecording(added) {
         .joinRaw('LEFT JOIN `rule_meta` a ON `rules`.`id` = a.`rule_id` AND a.`metaName` = \'rule\'')
         .joinRaw('LEFT JOIN `rule_meta` b ON `rules`.`id` = b.`rule_id` AND b.`metaName` = \'type\'');
     } catch (error) {
-      console.error('Error in startRecording', error);
+      logError('Error in startRecording', error);
     }
     
     if(rules.length > 0) {
@@ -1207,7 +1272,7 @@ async function stopRecording() {
     
     return 1;
   } catch (error) {
-    console.error(error);
+    logError('Error in stopRecording', error);
     
     return -1;
   }
@@ -1332,7 +1397,7 @@ function initDiscord() {
     discordClient.on('ready', () => {
       discordTimer = setInterval(updateDiscordActivity, 15000);
     });
-    discordClient.login({ clientId: DiscordAID }).catch(console.error);
+    discordClient.login({ clientId: DiscordAID }).catch(logError);
   }
 }
 function deInitDiscord() {
@@ -1455,6 +1520,63 @@ async function getLatestTrackedAppForDiscord() {
     .groupBy('statistics.id')
     .orderBy([{ column: 'statistics.started_at', order: 'desc' }])
     .limit(1);
+}
+/* </editor-fold> */
+/* <editor-fold desc="* Log Functions"> */
+/*****************
+ * Log Functions *
+ *****************/
+function log() {
+  // Log 2 File
+  _log(...arguments);
+  
+  // Log 2 Console
+  console.log(...arguments);
+}
+function logError() {
+  // Log 2 File
+  _log('[ERROR]', ...arguments);
+  
+  // Log 2 Console
+  console.error(...arguments);
+}
+function _log() {
+  const fullDate = new Date();
+  const date = fullDate.toISOString().split("T")[0].replaceAll("-", "");
+  const file = `${date}.log`;
+  
+  return new Promise((resolve, reject) => {
+    fs.opendir(path.join(app.getPath("documents"), config.title, "logs"), (dErr, dir) => {
+      if (dErr) {
+        console.error(dErr);
+        reject();
+        return;
+      }
+      fs.open(path.join(dir.path, file), 'a', (fErr, fd) => {
+        if (fErr) {
+          console.error(fErr);
+          reject();
+          return;
+        }
+        let logDate = fullDate.toISOString().replaceAll("T", " ").replaceAll(/\.\d+Z/g, "");
+        let logData = [...arguments];
+        fs.write(fd, `[${logDate}] ${JSON.stringify(logData)}\n`, (fdErr, bWritten) => {
+          if (fdErr) {
+            console.error(fdErr);
+            reject();
+            return;
+          }
+          fs.close(fd);
+          resolve("1");
+        });
+      });
+    });
+  });
+}
+
+function logSync() {
+  console.log(...arguments);
+  return _log(...arguments);
 }
 /* </editor-fold> */
 /* <editor-fold desc="* Extensions *"> */

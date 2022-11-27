@@ -9,6 +9,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 /* Expose Specific IPC channel funcs */
 contextBridge.exposeInMainWorld('ipc', {
   invokeGeneralInvoke: (data) => ipcRenderer.invoke('generalInvoke', data),
+  sendTrayWindow: (data) => ipcRenderer.send('trayWindow', data),
   onElectron: (callback) => {
     ipcRenderer.on('electron', (event, args) => callback(args));
   },
