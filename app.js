@@ -280,8 +280,12 @@ if (!singleLock) {
   app.on('ready', function () {
     // Init i18n
     i18n = new (require('./ElectronLibs/translations/i18n'))({
-      lang: settings.get('app.lang', 'sys'),
-      dir: isDev ? null : path.join(app.getPath("documents"), config.title, "languages")
+      language: settings.get('app.lang', 'sys'),
+      langDir: isDev ? null : path.join(app.getPath("documents"), config.title, "languages"),
+      log: {
+        info: log,
+        error: logError
+      }
     });
     
     // Ready
@@ -296,7 +300,11 @@ if (!singleLock) {
     // Begin Process List Watching
     processList = new (require('./ElectronLibs/processList/processList'))({
       initialDelay: settings.get('app.processListInitial', 5),
-      recurringDelay: settings.get('app.processListRecurring', 1)
+      recurringDelay: settings.get('app.processListRecurring', 1),
+      log: {
+        info: log,
+        error: logError
+      }
     });
     
     processList.once("ListUpdate", async () => {
@@ -767,7 +775,6 @@ ipcMain.handle('generalInvoke', async function (event, data) {
         }
         case "appLang":
           settings.set('app.lang', data.payload.value);
-          i18n.setLang(settings.get('app.lang', 'sys'));
           return {
             setting: data.payload.setting,
             value: settings.get('app.lang', 'sys')

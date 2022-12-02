@@ -10,16 +10,24 @@ const EventEmitter = require('events');
 
 let config = {
   initialReadDelay: 5000,
-  recurringReadDelay: 1000
+  recurringReadDelay: 1000,
+  log: {
+    info: console.log,
+    error: console.error
+  }
 };
 let processList = [], prevProcessList = [];
 let platform, release, timer;
 
 // TODO redo this from the ground up!
 class ps extends EventEmitter {
-  constructor({initialDelay, recurringDelay}) {
+  constructor({initialDelay, recurringDelay, log = {info: null, error: null}}) {
     super();
   
+    // Override default logging funcs
+    if(log?.info) config.log.info = log.info;
+    if(log?.error) config.log.error = log.error;
+    
     // Load Config
     config.initialReadDelay = initialDelay*1000;
     config.recurringReadDelay = recurringDelay*1000;
@@ -46,7 +54,7 @@ class ps extends EventEmitter {
             if(error || stdout.trim().length === 0) {
               // TODO: npm i alert
               //   alert("Please install wmctrl package! and then restart this app");
-              console.error(error);
+              config.log.error("processList", error);
               app.exit(error.code);
               return;
             }
@@ -115,7 +123,7 @@ const _getProcessList = (psClass) => {
               if(error || stdout.trim().length === 0) {
                 // TODO: npm i alert
                 //   alert("Please install wmctrl package! and then restart this app");
-                console.error(error);
+                config.log.error("processList", error);
                 return;
               }
         
@@ -233,8 +241,7 @@ const _getProcessList = (psClass) => {
               
                     return _data;
                   } catch (psError) {
-                    console.error('Error occurred while trying to ps');
-                    console.error(psError);
+                    config.log.error("processList", "Error occurred while trying to ps", psError);
                     return "";
                   }
                 })
@@ -246,8 +253,7 @@ const _getProcessList = (psClass) => {
             }
           );
       } catch (wmCtrlError) {
-        console.error('Error Occurred while trying to fetch open windows with wmctrl');
-        console.error(wmCtrlError);
+        config.log.error("processList", "Error Occurred while trying to fetch open windows with wmctrl", wmCtrlError);
       }
       break;
     case 'win32':
@@ -277,7 +283,7 @@ const _getProcessList = (psClass) => {
           },
           (error, stdout, stderr) => {
             if(error) {
-              console.error(error);
+              config.log.error("processList", error);
               app.exit(error.code);
               return;
             }
@@ -355,7 +361,7 @@ const _getProcessList = (psClass) => {
           });
       break;
     default:
-      console.error('[processList.js]', `Platform '${platform}' is not supported!`);
+      config.log.error("processList", `Platform '${platform}' is not supported!`);
       app.exit(1);
       break;
   }

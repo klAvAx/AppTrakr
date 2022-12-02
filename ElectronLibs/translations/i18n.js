@@ -9,20 +9,30 @@ let loadedLanguage;
 let _config = {
   language: '',
   languageTag: '',
-  langDir: null
+  langDir: null,
+  log: {
+    info: console.log,
+    error: console.error
+  }
 };
 
 // TODO separate this out to a git module
-function i18n(config) {
-  _config.language = config.lang;
+function i18n({language, languageTag, langDir, log = {info: null, error: null}}) {
+  _config.language = language;
   
-  if(Object.keys(config).includes("dir") && config.dir) _config.langDir = config.dir;
+  // Override log funcs
+  if(log?.info) _config.log.info = log.info;
+  if(log?.error) _config.log.error = log.error;
+  
+  // Set Language Files directory
+  if(langDir) _config.langDir = langDir;
   
   // Init
   langSet();
 }
 
 i18n.prototype.setLang = function (lang) {
+  _config.log.info("I18N", "Language change", `${_config.language} -> ${lang}`);
   _config.language = lang;
   
   langSet();

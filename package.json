@@ -1,7 +1,7 @@
 {
   "name": "apptrakr",
   "title": "App Trakr",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Service based launched application tracker",
   "private": true,
   "main": "app.js",
@@ -34,7 +34,7 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage", "tar.gz"
       ],
       "artifactName": "${productName}-${version}.${ext}",
       "desktop": {
