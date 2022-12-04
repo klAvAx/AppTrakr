@@ -254,6 +254,7 @@ const _getProcessList = (psClass) => {
           );
       } catch (wmCtrlError) {
         config.log.error("processList", "Error Occurred while trying to fetch open windows with wmctrl", wmCtrlError);
+        setTimeout(_getProcessList, config.recurringReadDelay, _this);
       }
       break;
     case 'win32':

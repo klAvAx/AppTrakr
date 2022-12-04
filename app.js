@@ -70,20 +70,35 @@ if (
   }
   
   // Compress Log files
-  // TODO add functionality to keep only last x days, CONFIGURABLE
   fs.opendir(path.join(app.getPath("documents"), config.title, "logs"), (dErr, dir) => {
     if(dErr) {
       console.error(dErr);
       return;
     }
-    let date = (new Date()).toISOString().split("T")[0].replaceAll("-", "");
+    let date = (new Date()).toISOString().split("T")[0];
+    let dateMS = Date.parse(date + "T00:00:00.000Z");
+    let dateFName = date.replaceAll("-", "");
+    let retentionDays = settings.get('app.log.retentionDays', 14);
+    let retentionMs = retentionDays * 24 * 60 * 60 * 1000;
     
-    let files = fs
-      .readdirSync(dir.path)
-      .filter((file) => !(/\.log\.gz/.test(file)));
+    let files = fs.readdirSync(dir.path);
     
     for(const file of files) {
-      if(file !== `${date}.log`) {
+      if(/\.log\.gz/.test(file.toLowerCase())) {
+        let cTimeMs = fs.statSync(path.join(dir.path, file), {throwIfNoEntry: false})?.ctimeMs;
+        let diffMs = dateMS - cTimeMs;
+        
+        // Today's log file
+        if(diffMs <= 0) continue;
+        
+        // Retention Limit not reached
+        if(diffMs < retentionMs) continue;
+        
+        // Retention Limit reached or exceeded
+        fs.rmSync(path.join(dir.path, file));
+      } else {
+        if(file === `${dateFName}.log`) continue;
+        
         const gzip = zlib.createGzip();
         const source = fs.createReadStream(path.join(dir.path, file));
         const destination = fs.createWriteStream(path.join(dir.path, `${file}.gz`));
@@ -773,6 +788,13 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             value: settings.get('app.statistics.latestTitleCount', 3)
           }
         }
+        case "appLogRetentionDays": {
+          settings.set('app.log.retentionDays', data.payload.value);
+          return {
+            setting: data.payload.setting,
+            value: settings.get('app.log.retentionDays', 14)
+          }
+        }
         case "appLang":
           settings.set('app.lang', data.payload.value);
           return {
@@ -877,7 +899,8 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             appRecordingProcesses: settings.get('app.recordingProcesses', false),
             appStatisticsLatestTitleCount: settings.get('app.statistics.latestTitleCount', 3),
             appStatisticsCollapsedGroupsByDefault: settings.get('app.statistics.collapsedGroupsByDefault', true),
-            appStatisticsShowElapsedDays: settings.get('app.statistics.showElapsedDays', false)
+            appStatisticsShowElapsedDays: settings.get('app.statistics.showElapsedDays', false),
+            appLogRetentionDays: settings.get('app.log.retentionDays', 14)
           },
           filters: settings.get('app.filters', {})
         }
@@ -1342,6 +1365,7 @@ function initSettings() {
     settings.set('app.statistics.latestTitleCount', 3);
     settings.set('app.statistics.collapsedGroupsByDefault', true);
     settings.set('app.statistics.showElapsedDays', false);
+    settings.set('app.log.retentionDays', 14);
     
     // First Startup
     settings.set('settingsInit', !isDev);

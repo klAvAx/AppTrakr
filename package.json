@@ -1,7 +1,7 @@
 {
   "name": "apptrakr",
   "title": "App Trakr",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Service based launched application tracker",
   "private": true,
   "main": "app.js",
