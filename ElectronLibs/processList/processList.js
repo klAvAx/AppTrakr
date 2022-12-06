@@ -124,6 +124,7 @@ const _getProcessList = (psClass) => {
                 // TODO: npm i alert
                 //   alert("Please install wmctrl package! and then restart this app");
                 config.log.error("processList", error);
+                setTimeout(_getProcessList, config.recurringReadDelay, _this);
                 return;
               }
         

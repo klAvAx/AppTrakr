@@ -1209,11 +1209,11 @@ async function markAsStoppedDB(timestamp, rule, process) {
 }
 
 async function recordTitleChange(timestamp, processFromDB, processCurrentlyRunning) {
-  let _db = processFromDB.filter((x) => x.PID === processCurrentlyRunning.Id)[0];
-  
-  if(Object.keys(_db).length === 0) console.error("titlePreRecordError");
+  let _db = processFromDB.filter((x) => x.PID === (processCurrentlyRunning.Id).toString())[0];
   
   try {
+    if(Object.keys(_db).length === 0) logError('Error in recordTitleChange', 'Filter Length = 0');
+    
     // Record Title Change
     const db = await knex
       .insert({
