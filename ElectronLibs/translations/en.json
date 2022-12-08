@@ -117,7 +117,11 @@
  "general_text_undefined_rule_type": "Undefined Rule Type!",
  "text_error_unknown_check_logs": "Unknown Error, Please Check the Logs if possible",
  "text_error_database_entry_already_exists": "Entry in the database already exists",
+ "text_error_unknown_contact_developer": "Unknown Error, Check Logs & Contact the Dev",
  "settings_heading_log_group": "Logs",
  "settings_label_log_retention": "Log Retention Period",
- "general_time_unit_days": "Days"
+ "general_time_unit_days": "Days",
+ "settings_label_tray_action": "Tray Icon Click Action",
+ "general_text_showWindow": "Show Tray Window",
+ "general_text_toggleRecord": "Toggle Recording"
 }

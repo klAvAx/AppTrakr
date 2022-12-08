@@ -20,6 +20,14 @@ const DiscordRPC = require("discord-rpc");
 const DiscordAID = "...Discord Application ID...";
 const DiscordSEC = "...Discord Application Secret...";
 
+// TODO implement Rich Discord Presence WITH:
+//  *** requires debug testing!!!
+//  *** on recording stop does not stop discord rich presence
+
+// Leave for some next version
+// TODO implement basic update checker (github based, does have to go live before this can be done?)
+// TODO some language lines require inflections
+
 // Setup App Directory
 if (
   !fs.existsSync(path.join(app.getPath("documents"), config.title)) ||
@@ -552,7 +560,25 @@ function createTray() {
   ]);
   
   tray.on('click', function () {
-    toggleTray();
+    const action = settings.get('app.trayAction', 'showWindow');
+    switch (action) {
+      case 'showWindow': {
+        toggleTray();
+        break;
+      }
+      case 'toggleRec': {
+        const newValue = !settings.get('app.recordingProcesses', false)
+        settings.set('app.recordingProcesses', newValue);
+        trayWindow.webContents.send("electron", {
+          type: "settingUpdate",
+          payload: {
+            setting: 'appRecordingProcesses',
+            value: newValue
+          }
+        });
+        break;
+      }
+    }
   });
   
   tray.setToolTip(config.title);
@@ -795,6 +821,12 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             value: settings.get('app.log.retentionDays', 14)
           }
         }
+        case "appTrayAction":
+          settings.set('app.trayAction', data.payload.value);
+          return {
+            setting: data.payload.setting,
+            value: settings.get('app.trayAction', 'showWindow')
+          }
         case "appLang":
           settings.set('app.lang', data.payload.value);
           return {
@@ -828,12 +860,6 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           };
         case "appRecordingProcesses":
           settings.set("app.recordingProcesses", !settings.get('app.recordingProcesses', false));
-          
-          tray.setImage(settings.get("app.recordingProcesses", false) ?
-            path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64_rec.png' : 'tray_64x64_black_rec.png')) :
-            path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64.png' : 'tray_64x64_black.png'))
-          );
-          
           return {
             setting: data.payload,
             value: settings.get('app.recordingProcesses', false)
@@ -891,6 +917,7 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             appLang: settings.get('app.lang', 'sys'),
             appAutoStart: (os.platform() === "win32" || os.platform() === "darwin" ? app.getLoginItemSettings().openAtLogin : null),
             appTheme: settings.get('app.theme', 'sys'),
+            appTrayAction: settings.get('app.trayAction', 'showWindow'),
             appAllowInternetConnectivity: settings.get('app.allowInternetConnectivity', false),
             appDiscordPossible: DiscordAID !== "...Discord Application ID...",
             appDiscordEnabled: settings.get('app.discord.enabled', false),
@@ -1357,6 +1384,7 @@ function initSettings() {
     settings.set('app.lang', 'sys');
     settings.set('app.theme', 'sys');
     settings.set('app.allowInternetConnectivity', false);
+    settings.set('app.trayAction', 'showWindow');
     
     // App Specific
     settings.set('app.recordingProcesses', false);
@@ -1380,6 +1408,11 @@ function initSettings() {
   });
   
   settings.onDidChange('app.recordingProcesses', function (newValue) {
+    tray.setImage(newValue ?
+      path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64_rec.png' : 'tray_64x64_black_rec.png')) :
+      path.join(__dirname, 'assets', 'img', (nativeTheme.shouldUseDarkColors ? 'tray_64x64.png' : 'tray_64x64_black.png'))
+    );
+    
     if(newValue === false) {
       stopRecording().then(async () => {
         await sendStatisticsUpdate();
