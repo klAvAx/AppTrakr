@@ -1,7 +1,7 @@
 {
   "name": "apptrakr",
   "title": "App Trakr",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Service based launched application tracker",
   "private": true,
   "main": "app.js",
@@ -34,7 +34,8 @@
     },
     "linux": {
       "target": [
-        "AppImage", "tar.gz"
+        "AppImage",
+        "tar.gz"
       ],
       "artifactName": "${productName}-${version}.${ext}",
       "desktop": {
@@ -60,16 +61,15 @@
     }
   },
   "scripts": {
-    "postinstall": "npm install --prefix ui",
-    "dev": "concurrently \"cross-env BROWSER=none npm run startUI\" \"wait-on http://localhost:3000 && npm run startNODE\"",
-    "clean": "concurrently \"rimraf -r ui/build\" \"rimraf -r release/win-unpacked\" \"rimraf -r release/builder-debug.yml\" \"rimraf -r release/builder-effective-config.yaml\" \"rimraf -r app.db\"",
+    "dev": "concurrently \"cross-env BROWSER=none npm run startUI\" \"wait-on http://127.0.0.1:3000 && npm run startNODE\"",
+    "clean": "concurrently \"rimraf ui/build\" \"rimraf release/win-unpacked\" \"rimraf release/builder-debug.yml\" \"rimraf release/builder-effective-config.yaml\" \"rimraf app.db\"",
     "start": "electron .",
     "startNODE": "nodemon --signal SIGUSR2 --watch . --exec \"npm run start\" --ignore \"ui/*\" --ignore \"assets/*\" --ignore \"ElectronLibs/translations/*.json\"",
     "startUI": "npm start --prefix ui",
     "rebuild": ".\\node_modules\\.bin\\electron-rebuild",
     "package": "npm run build --prefix ui && electron-builder --dir",
-    "distribute": "npm run build --prefix ui && electron-builder && rimraf -r ui/build",
-    "distribute-wl": "npm run build --prefix ui && electron-builder -wl && rimraf -r ui/build"
+    "distribute": "npm run build --prefix ui && electron-builder && rimraf ui/build",
+    "distribute-wl": "npm run build --prefix ui && electron-builder -wl && rimraf ui/build"
   },
   "author": {
     "name": "Aldas Švambaris",
@@ -80,27 +80,27 @@
   "license": "GNU GPLv3",
   "keywords": [],
   "devDependencies": {
-    "concurrently": "^7.3.0",
+    "concurrently": "^7.6.0",
     "copyfiles": "^2.4.1",
     "cross-env": "^7.0.3",
-    "electron": "^20.1.1",
-    "electron-builder": "^23.3.3",
+    "electron": "^22.0.3",
+    "electron-builder": "^23.6.0",
     "electron-devtools-installer": "^3.2.0",
-    "electron-packager": "^16.0.0",
+    "electron-packager": "^17.1.1",
     "electron-rebuild": "^3.2.5",
-    "nodemon": "^2.0.16",
-    "rimraf": "^3.0.2",
-    "wait-on": "^6.0.0"
+    "nodemon": "^2.0.20",
+    "rimraf": "^4.1.1",
+    "wait-on": "^7.0.1"
   },
   "dependencies": {
     "discord-rpc": "^4.0.1",
-    "discord.js": "^14.3.0",
-    "electron-context-menu": "^3.1.1",
+    "discord.js": "^14.7.1",
+    "electron-context-menu": "^3.6.1",
     "electron-is-dev": "^2.0.0",
     "electron-store": "^8.0.1",
     "electron-traywindow-positioner": "^1.1.1",
-    "knex": "^2.3.0",
-    "ps-list": "^8.1.0",
-    "sqlite3": "^5.0.2"
+    "knex": "^2.4.1",
+    "ps-list": "^8.1.1",
+    "sqlite3": "^5.1.4"
   }
 }

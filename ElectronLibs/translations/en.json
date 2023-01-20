@@ -123,5 +123,11 @@
  "general_time_unit_days": "Days",
  "settings_label_tray_action": "Tray Icon Click Action",
  "general_text_showWindow": "Show Tray Window",
- "general_text_toggleRecord": "Toggle Recording"
+ "general_text_toggleRecord": "Toggle Recording",
+ "settings_label_latest_stat_at_top": "Latest Statistics at the top",
+ "settings_label_limit_stat_entries": "Limit Shown Statistics to Chunks",
+ "settings_label_stat_chunk_size": "Statistic Chunk Size",
+ "header_button_title_show_extra_info": "Show Extra Info Icon",
+ "header_button_title_hide_extra_info": "Hide Extra Info Icon",
+ "general_text_loading": "Loading..."
 }

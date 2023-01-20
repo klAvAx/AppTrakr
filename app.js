@@ -22,9 +22,10 @@ const DiscordSEC = "...Discord Application Secret...";
 
 // TODO implement Rich Discord Presence WITH:
 //  *** requires debug testing!!!
-//  *** on recording stop does not stop discord rich presence
+//  *** on recording stop does not stop discord rich presence?
 
 // Leave for some next version
+// TODO add Combo "Executable + Window Title" Tracking Rule set
 // TODO implement basic update checker (github based, does have to go live before this can be done?)
 // TODO some language lines require inflections
 
@@ -340,7 +341,7 @@ if (!singleLock) {
     
     processList.on("AddedToList", async (added) => {
       if(isDev) {
-        console.log("Added", new Date().getTime(), added);
+        console.log(`Added ${added.length} entries @ ${new Date().getTime()}`);
       }
       startRecording(added).then(async () => {
         await sendStatisticsUpdate();
@@ -349,7 +350,7 @@ if (!singleLock) {
     
     processList.on("RemovedFromList", async (removed) => {
       if(isDev) {
-        console.log("Removed", new Date().getTime(), removed);
+        console.log(`Removed ${removed.length} entries @ ${new Date().getTime()}`);
       }
       if(settings.get('app.recordingProcesses', false)) {
         const timestamp = new Date().getTime();
@@ -399,7 +400,7 @@ if (!singleLock) {
     
     processList.on("TitleChanged", async (newTitles, oldTitles) => {
       if(isDev) {
-        console.log("Changed", new Date().getTime(), newTitles, oldTitles);
+        console.log(`Added ${newTitles.length} entries & Removed ${oldTitles.length} entries @ ${new Date().getTime()}`);
       }
       if(settings.get('app.recordingProcesses', false)) {
         const timestamp = new Date().getTime();
@@ -423,7 +424,6 @@ if (!singleLock) {
             for(const rule of rules) {
               switch(rule.type) {
                 case 'exec': {
-                  
                   const db = await knex
                     .select('statistics.id', 'statistics.started_at')
                     .select(knex.raw('a.`metaValue` AS \'PID\''))
@@ -814,6 +814,13 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             value: settings.get('app.statistics.latestTitleCount', 3)
           }
         }
+        case "appStatisticsShownEntryChunkSize": {
+          settings.set('app.statistics.shownEntryChunkSize', data.payload.value);
+          return {
+            setting: data.payload.setting,
+            value: settings.get('app.statistics.shownEntryChunkSize', 4)
+          }
+        }
         case "appLogRetentionDays": {
           settings.set('app.log.retentionDays', data.payload.value);
           return {
@@ -876,6 +883,18 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             setting: data.payload,
             value: settings.get('app.statistics.showElapsedDays', false)
           }
+        case "appStatisticsNewestAtTop":
+          settings.set("app.statistics.newestAtTop", !settings.get('app.statistics.newestAtTop', false));
+          return {
+            setting: data.payload,
+            value: settings.get('app.statistics.newestAtTop', false)
+          }
+        case "appStatisticsLimitShownEntries":
+          settings.set("app.statistics.limitShownEntries", !settings.get('app.statistics.limitShownEntries', false));
+          return {
+            setting: data.payload,
+            value: settings.get('app.statistics.limitShownEntries', false)
+          }
         case "appIsPinned": {
           appIsPinned = !appIsPinned;
           return {
@@ -927,6 +946,9 @@ ipcMain.handle('generalInvoke', async function (event, data) {
             appStatisticsLatestTitleCount: settings.get('app.statistics.latestTitleCount', 3),
             appStatisticsCollapsedGroupsByDefault: settings.get('app.statistics.collapsedGroupsByDefault', true),
             appStatisticsShowElapsedDays: settings.get('app.statistics.showElapsedDays', false),
+            appStatisticsNewestAtTop: settings.get('app.statistics.newestAtTop', false),
+            appStatisticsLimitShownEntries: settings.get('app.statistics.limitShownEntries', false),
+            appStatisticsShownEntryChunkSize: settings.get('app.statistics.shownEntryChunkSize', 4),
             appLogRetentionDays: settings.get('app.log.retentionDays', 14)
           },
           filters: settings.get('app.filters', {})
@@ -1033,12 +1055,34 @@ ipcMain.handle('generalInvoke', async function (event, data) {
           response = await knex(data.payload.type.toLowerCase())
             .where('id', '=', id)
             .update(baseData);
-          
+
           for(const metaKey in data.payload.data) {
-            await knex(metaTable)
-              .where(`${metaTablePrefix}_id`, '=', id)
-              .where('metaName', '=', metaKey)
-              .update({metaValue: data.payload.data[metaKey]});
+            let metaVal = (await knex
+                .select('metaValue')
+                .where(`${metaTablePrefix}_id`, '=', id)
+                .where('metaName', '=', metaKey)
+                .from(metaTable))?.[0]?.['metaValue'];
+
+            if(metaVal === undefined) {
+              // Set
+              await knex
+                  .insert({
+                    [`${metaTablePrefix}_id`]: id,
+                    metaName: metaKey,
+                    metaValue: data.payload.data[metaKey]
+                  })
+                  .into(metaTable);
+            } else {
+              // Update
+              await knex(metaTable)
+                  .where(`${metaTablePrefix}_id`, '=', id)
+                  .where('metaName', '=', metaKey)
+                  .update({metaValue: data.payload.data[metaKey]});
+            }
+          }
+
+          if(metaTablePrefix === 'rule') {
+            data.payload.data['group_id'] = baseData['group_id'];
           }
           
           data.payload.data.id = id;
@@ -1063,6 +1107,10 @@ ipcMain.handle('generalInvoke', async function (event, data) {
                 metaValue: data.payload.data[metaKey]
               })
               .into(metaTable);
+          }
+
+          if(metaTablePrefix === 'rule') {
+            data.payload.data['group_id'] = baseData['group_id'];
           }
         }
       } catch (error) {
@@ -1393,6 +1441,9 @@ function initSettings() {
     settings.set('app.statistics.latestTitleCount', 3);
     settings.set('app.statistics.collapsedGroupsByDefault', true);
     settings.set('app.statistics.showElapsedDays', false);
+    settings.set('app.statistics.newestAtTop', false);
+    settings.set('app.statistics.limitShownEntries', false);
+    settings.set('app.statistics.shownEntryChunkSize', 4);
     settings.set('app.log.retentionDays', 14);
     
     // First Startup
@@ -1423,7 +1474,18 @@ function initSettings() {
       });
     }
   });
-  
+
+  settings.onDidChange('app.statistics.limitShownEntries', function (newValue) {
+    if(newValue && trayWindow) {
+      trayWindow.webContents.send(
+          "electron",
+          {
+            type: "resetStatisticGroups"
+          }
+      );
+    }
+  });
+
   // IF Internet Connectivity is allowed
   settings.onDidChange('app.allowInternetConnectivity', function (newValue) {
     if(newValue) {
