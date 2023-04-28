@@ -35,8 +35,9 @@ Be sure to have these assets defined **without** double quotes in Rich presence 
 ## Usage
 
 - Dashboard - generalized category and rule overview view.
-- Statistics - this view will show all recorded/gathered statistics with ability to clear an category or filter it.
-- Detected Processes - will show what app has detected as an running process.
+- Statistics - this view will show all recorded/gathered statistics with ability to clear a category or filter it.
+  - you can remove single items by holding Control key
+- Detected Processes - will show what app has detected as a running process.
 - Settings - this will let you customize app settings such as:
   - Tracking categories
   - Tracking rules
