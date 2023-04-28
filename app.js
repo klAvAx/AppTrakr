@@ -1202,6 +1202,35 @@ ipcMain.handle('generalInvoke', async function (event, data) {
         response: response
       }
     }
+    case "deleteItem": {
+      let response;
+
+      try {
+        let ItemID = data.payload;
+
+        response = await knex("statistics")
+            .where('id', '=', ItemID)
+            .del();
+      } catch (error) {
+        response = error;
+        logError('Error in generalInvoke ON deleteItem', error);
+      }
+
+      if (typeof response?.code === "string") {
+        response = {
+          type: "error",
+          error: {
+            errno: response.errno,
+            code: response.code
+          }
+        };
+      }
+
+      return {
+        request: data,
+        response: response
+      }
+    }
     
     default: {
       if(isDev) {

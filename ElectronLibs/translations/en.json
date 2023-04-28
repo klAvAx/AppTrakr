@@ -129,5 +129,6 @@
  "settings_label_stat_chunk_size": "Statistic Chunk Size",
  "header_button_title_show_extra_info": "Show Extra Info Icon",
  "header_button_title_hide_extra_info": "Hide Extra Info Icon",
- "general_text_loading": "Loading..."
+ "general_text_loading": "Loading...",
+ "general_message_text_delete_item": "This WILL delete this item and all associated Data!"
 }
